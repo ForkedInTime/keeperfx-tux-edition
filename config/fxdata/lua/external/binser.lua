@@ -35,7 +35,6 @@ local char = string.char
 local byte = string.byte
 local format = string.format
 local sub = string.sub
-local dump = string.dump
 local floor = math.floor
 local frexp = math.frexp
 local unpack = unpack or table.unpack
@@ -224,10 +223,17 @@ local function newbinser()
     -- TABLE = 207
     -- REFERENCE = 208
     -- CONSTRUCTOR = 209
-    -- FUNCTION = 210
+    -- FUNCTION = 210 (bytecode; read from old saves only, never written)
     -- RESOURCE = 211
     -- INT64 = 212
     -- TABLE WITH META = 213
+    -- FUNCTION SPEC = 214 (this edition: a function as its source text)
+
+    -- This edition never loads bytecode: LuaJIT does not verify it, so a crafted chunk in a save,
+    -- a resync from another player or a map's own data could reach memory freely. A function is
+    -- written as the table function_codec.encode makes of it and rebuilt by function_codec.decode;
+    -- function_codec.legacy rebuilds a FUNCTION record from an old save without loading it.
+    local function_codec = {}
 
     local mts = {}
     local ids = {}
@@ -347,12 +353,15 @@ local function newbinser()
             accum[#accum + 1] = number_to_str(visited[x])
         else
             if check_custom_type(x, visited, accum) then return end
+            if not function_codec.encode then
+                error("Cannot serialize a function without a function codec.")
+            end
+            -- The function's reference number comes before its spec table's, here and when read
             visited[x] = visited[NEXT]
             visited[NEXT] =  visited[NEXT] + 1
-            local str = dump(x)
-            accum[#accum + 1] = "\210"
-            accum[#accum + 1] = number_to_str(#str)
-            accum[#accum + 1] = str
+            local spec = function_codec.encode(x)
+            accum[#accum + 1] = "\214"
+            types.table(spec, visited, accum)
         end
     end
 
@@ -392,13 +401,23 @@ local function newbinser()
             local nextindex = dataindex + length
             local ret = sub(str, dataindex, nextindex - 1)
             if t == 210 then
-                local err
-                ret, err = load(ret, nil, "b")
-                if not ret then
-                    error("Invalid serialized function: " .. tostring(err))
+                -- Bytecode from an old save: rebuilt from its script, never loaded
+                if not function_codec.legacy then
+                    error("Invalid serialized function: bytecode is not accepted")
                 end
+                ret = function_codec.legacy(ret)
             end
             visited[#visited + 1] = ret
+            return ret, nextindex
+        elseif t == 214 then
+            if not function_codec.decode then
+                error("Cannot deserialize a function without a function codec.")
+            end
+            local slot = #visited + 1
+            visited[slot] = true -- holds the function's number until its spec is read
+            local spec, nextindex = deserialize_value(str, index + 1, visited)
+            local ret = function_codec.decode(spec)
+            visited[slot] = ret
             return ret, nextindex
         elseif t == 207 or t == 213 then
             local mt, count, nextindex
@@ -731,6 +750,10 @@ local function newbinser()
         registerResource = registerResource,
         unregisterResource = unregisterResource,
         registerClass = registerClass,
+        -- This edition: how functions are written and read (see function_codec above)
+        setFunctionCodec = function(encode, decode, legacy)
+            function_codec.encode, function_codec.decode, function_codec.legacy = encode, decode, legacy
+        end,
 
         newbinser = newbinser
     }

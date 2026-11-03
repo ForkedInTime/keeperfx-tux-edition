@@ -328,6 +328,7 @@ src/logging.c \
 src/net_spectator.c \
 src/observer.c \
 src/lua_readonly_io.c \
+src/lua_sandbox.c \
 src/kernel_memtracker.c \
 src/kfx/platform/FileSystemLb.cpp \
 src/kfx/save/core/save_codec.cpp \

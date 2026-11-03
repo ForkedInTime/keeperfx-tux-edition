@@ -102,8 +102,7 @@ and the engine package second:
 
 | Kind | Directories | Behaviour |
 |---|---|---|
-| Read-only | `lang` `fxdata` `creatrs` `ldata` `multiplayer` | Symlinked whole, refreshed each launch so a pacman upgrade takes effect |
-| Merged | `data` `sound` `campgns` `levels` | Real directories; packaged entries linked in **individually** so the user's own Dungeon Keeper files and add-on campaigns and maps sit beside them. `levels/personal` and `levels/legacy` are real directories for the user to drop maps into |
+| Merged | `lang` `fxdata` `creatrs` `ldata` `multiplayer` `data` `sound` `campgns` `levels` | Every directory, at any depth, is a real one owned by the user; only the packaged **files** are links, refreshed each launch so a pacman upgrade takes effect, and a link to a file the package no longer ships is removed. So the user's own Dungeon Keeper files and add-ons sit beside the packaged ones anywhere: a Workshop map that adds itself to `levels/standard`, a campaign, multiplayer maps. `levels/personal` and `levels/legacy` hold copies, not links, of the readme the package puts there |
 | User-owned | `mods` `music` | Seeded once with `cp -rn`, never clobbered |
 | Writable state | `save` `scrshots` | Created if absent |
 

@@ -8,6 +8,7 @@
 
 #include "lua_api.h"
 #include "lua_readonly_io.h"
+#include "lua_sandbox.h"
 
 #include "bflib_basics.h"
 #include "bflib_fileio.h"
@@ -45,7 +46,9 @@ struct lua_State *Lvl_script = NULL;
 static int lua_dofile_on_disk(lua_State *L, const char *fname)
 {
     char disk_fname[PATH_MAX];
-    return luaL_dofile(L, LbFileCaseInsensitivePath(fname, disk_fname, sizeof(disk_fname)));
+    const char *path = LbFileCaseInsensitivePath(fname, disk_fname, sizeof(disk_fname));
+    // Text only, as every load in this file (lua_sandbox.c)
+    return lua_sandbox_loadfile(L, path) || lua_pcall(L, 0, LUA_MULTRET, 0);
 }
 #undef luaL_dofile
 #define luaL_dofile(L, fname) lua_dofile_on_disk(L, fname)
@@ -76,7 +79,7 @@ static int lua_searcher_on_disk(lua_State *L)
             {
                 char disk_fname[PATH_MAX];
                 LbFileCaseInsensitivePath(candidate, disk_fname, sizeof(disk_fname));
-                if (luaL_loadfile(L, disk_fname) != LUA_OK)
+                if (lua_sandbox_load_module(L, name, disk_fname) != LUA_OK)
                     return luaL_error(L, "error loading module '%s' from file '%s':\n\t%s", name, disk_fname, lua_tostring(L, -1));
                 return 1;
             }
@@ -219,6 +222,31 @@ void close_lua_script()
 }
 
 
+/* This edition: the path the game's own library (fxdata/lua/init.lua) loads with: fxdata alone,
+ * so that no campaign or level file of the same name stands in for one of its modules while the
+ * full debug library is still there (lua_sandbox.c). The default path it replaces is kept in
+ * default_path for setLuaPath() to build on once the library has loaded. */
+static void setLuaLibraryPath(lua_State *L, char *default_path, size_t len)
+{
+    char fx_data_path[4096];
+    prepare_file_path_buf(fx_data_path, sizeof(fx_data_path), FGrp_FxData, "lua/?.lua");
+    lua_getglobal(L, "package");
+    lua_getfield(L, -1, "path");
+    snprintf(default_path, len, "%s", lua_tostring(L, -1) ? lua_tostring(L, -1) : "");
+    lua_pop(L, 1);
+    lua_pushstring(L, fx_data_path);
+    lua_setfield(L, -2, "path");
+    lua_pop(L, 1);
+}
+
+static void restoreLuaDefaultPath(lua_State *L, const char *default_path)
+{
+    lua_getglobal(L, "package");
+    lua_pushstring(L, default_path);
+    lua_setfield(L, -2, "path");
+    lua_pop(L, 1);
+}
+
 int setLuaPath( lua_State* L)
 {
     #define PATH_LENGTH 4096
@@ -257,10 +285,10 @@ TbBool execute_lua_code_from_console(const char* code)
         return false;
     }
 
-    // luaL_dostring leaves the error message on failure, or whatever the code returned on success.
+    // lua_sandbox_dostring, like luaL_dostring, leaves the error message on failure, or whatever the code returned on success.
     // Popping a fixed count took one slot too many after every error, and the sixth error ended the game.
     int top = lua_gettop(Lvl_script);
-    int result = luaL_dostring(Lvl_script, code);
+    int result = lua_sandbox_dostring(Lvl_script, code);
     if (result != LUA_OK) {
         const char *message = lua_tostring(Lvl_script, -1);
         ERRORLOG("Failed to execute Lua code: %s", message ? message : "Unknown error");
@@ -289,7 +317,7 @@ TbBool execute_lua_code_from_script(const char* code)
 
     // Same stack handling as execute_lua_code_from_console()
     int top = lua_gettop(Lvl_script);
-    int result = luaL_dostring(Lvl_script, code);
+    int result = lua_sandbox_dostring(Lvl_script, code);
     if (result != LUA_OK) {
         const char *message = lua_tostring(Lvl_script, -1);
         ERRORLOG("Failed to execute Lua code: %s", message ? message : "Unknown error");
@@ -456,7 +484,7 @@ static void disable_lua_file_io(lua_State *L)
 {
     if (!replay.load_enable)
         return;
-    CheckLua(L, luaL_dostring(L, replay_file_io_stubs), "replay_file_io_stubs");
+    CheckLua(L, lua_sandbox_dostring(L, replay_file_io_stubs), "replay_file_io_stubs");
 }
 
 
@@ -496,6 +524,8 @@ TbBool open_lua_script(LevelNumber lvnum)
     }
 
     open_lua_standard_libraries(Lvl_script);
+    // This edition: no FFI, text-only loaders (lua_sandbox.c)
+    lua_sandbox_open(Lvl_script);
     disable_lua_functions(Lvl_script);
     disable_lua_file_io(Lvl_script);
     // After upstream's replay stubs, so replays read files and refuse writes as the game
@@ -506,7 +536,8 @@ TbBool open_lua_script(LevelNumber lvnum)
 
     reg_host_functions(Lvl_script);
 
-    setLuaPath(Lvl_script);
+    char default_path[4096];
+    setLuaLibraryPath(Lvl_script, default_path, sizeof(default_path));
 
     char* fname = prepare_file_fmtpath(FGrp_FxData, "lua/init.lua");
 
@@ -521,6 +552,12 @@ TbBool open_lua_script(LevelNumber lvnum)
         close_lua_script();
         return false;
     }
+    // The game's own library has kept what it needs of the debug library; campaigns, maps and
+    // mods, loaded below, get only debug.traceback and debug.getinfo (lua_sandbox.c), and the
+    // full module path: their level and campaign folders first
+    lua_sandbox_close_debug(Lvl_script);
+    restoreLuaDefaultPath(Lvl_script, default_path);
+    setLuaPath(Lvl_script);
 
     fname = prepare_file_fmtpath(FGrp_CmpgConfig, "lua/init.lua");
     if (LbFileExists(fname))
