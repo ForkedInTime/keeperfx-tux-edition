@@ -73,6 +73,7 @@ _src_for() {
 # existed, and a count goes to stderr at the end.
 moved=0
 stuck=0
+unlinked=0
 STASH_ROOT="$GAMEDIR/.replaced-by-package"
 STASH=""
 _same_file() {
@@ -148,7 +149,9 @@ _merge_tree() {
             # test starts no process, so a start stays quick.
             continue
         elif _clear_for_link "$dst/$base" "$f"; then
-            ln -sfn "$f" "$dst/$base"
+            # A folder the player made read-only must not stop the game: under set -e a
+            # failed ln would end the script here. Counted, and reported at the end.
+            ln -sfn "$f" "$dst/$base" 2>/dev/null || unlinked=$((unlinked + 1))
         fi
     done
 }
@@ -175,6 +178,10 @@ done
 if [ "$moved" -gt 0 ]; then
     echo "keeperfx-tux: moved $moved file(s) or folder(s) that an earlier install left in" \
          "$GAMEDIR, and that differ from the packaged game, to $STASH" >&2
+fi
+if [ "$unlinked" -gt 0 ]; then
+    echo "keeperfx-tux: $unlinked packaged file(s) could not be linked into $GAMEDIR" \
+         "(is a folder there read-only?); the game starts without them" >&2
 fi
 if [ "$stuck" -gt 0 ]; then
     echo "keeperfx-tux: $stuck file(s) or folder(s) in $GAMEDIR hide the packaged game's" \
