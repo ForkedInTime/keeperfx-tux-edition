@@ -10,7 +10,9 @@
 ---@field triggerData table
 
 
-require "debug"
+-- This edition: kept here, since scripts loaded after the game's own library only get
+-- debug.traceback and debug.getinfo (see src/lua_sandbox.c)
+local debug = require "debug"
 
 -- Check if the function relies on a specific environment (e.g., game state)
 local function validateClosure(func)

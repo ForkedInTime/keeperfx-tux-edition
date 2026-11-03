@@ -28,10 +28,9 @@
  *     the table below, so a userdata dressed up as a handle (debug.setmetatable)
  *     can at worst name another read-only file.
  *
- *     This is not a complete sandbox, and does not claim to be: with the debug
- *     library exposed and bytecode loading needed (serialisation restores saved
- *     functions as bytecode), a determined attacker has harder routes left. It
- *     closes the one-line ones.
+ *     On its own this closed the one-line routes only: bytecode and LuaJIT's FFI
+ *     reached further. lua_sandbox.c closes those, and cuts the debug library
+ *     down for scripts loaded after the game's own library.
  *
  *     The read functions follow Lua 5.1's liolib.c (MIT licence).
  * @par Copying and copyrights:
