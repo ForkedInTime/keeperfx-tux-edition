@@ -4,6 +4,59 @@ This tracks the changes in *this* fork on top of the KeeperFX team's `master`.
 Version numbers follow the engine build (`<major>.<minor>.<release>.<build>`), with
 `alpha` appended on the alpha channel and nothing appended on the stable one.
 
+## 1.4.0.6072 — 2026-11-03 — stable
+
+**Replaces 1.4.0.6062.** A security fix for downloaded maps, mods and campaigns, Workshop maps on the AUR
+package, and two launcher fixes:
+
+- **A map's Lua can no longer reach outside the game.** Level, campaign and mod scripts arrive with
+  downloaded content, and three routes led past the sandbox:
+  - *FFI.* The engine never opens LuaJIT's FFI library, but LuaJIT loads it by itself the first time it
+    reads a 64-bit number such as `1LL`, so two lines of a map's script could call any C function on the
+    machine (the team's issue #5567). It is now loaded once when a level starts and taken away; `1LL`
+    keeps working.
+  - *Bytecode.* LuaJIT runs precompiled Lua without checking it, so a crafted chunk can read and write
+    any memory. It came in through `loadstring`/`load`, through `loadfile`/`dofile`/`require` and a map's
+    own `.lua` file (which could be precompiled), and through saved games: the game stored the functions in
+    a level's script state as bytecode and loaded them back from the save file, from the state a host sends
+    in multiplayer, and from whatever a map had put in that state. Every one of those now accepts source
+    text only.
+  - *The debug library*, which reaches everything the game's own Lua holds. Scripts loaded after the
+    game's library keep `debug.traceback` and `debug.getinfo`, the parts the shipped campaigns use.
+  Measured with harmless payloads that announce themselves if they run: on 1.4.0.6062 eight of them ran
+  and FFI called a native function; on this build none did.
+- **Saved functions are kept as their source text.** So a save still restores the script functions it
+  holds — trigger callbacks and the like — and now even after the script that defined them is edited
+  (upstream's code read the script again at load time and fell back to the bytecode when it could not).
+  Saves made by 1.4.0.6062 and earlier load: their functions are rebuilt from the scripts, matched against
+  the stored bytecode as bytes, never run. Checked on Pandaemonium, Heroes' Journey, Sapphire Realms and
+  the original campaign: every function in a 1.4.0.6062 save came back (48, 27, 43, 71 and 11 of them on
+  the levels that keep any), none was lost, and no level logged a Lua error.
+- **AUR: Workshop maps install.** On the package install (Arch, Omarchy, EndeavourOS, CachyOS, Manjaro:
+  any pacman system) the launcher refused most Workshop maps
+  with "Could not write into levels": a map adds itself to the built-in Standard levels pack, and that
+  folder was a link to the package's copy under `/usr`, which only root can write to. The same went for
+  the other built-in map packs and campaigns and for `multiplayer`. Every folder in the game folder is
+  now your own, and only the game's own files inside are links to the package, so upgrades still
+  arrive straight from pacman. The first start after the upgrade takes a few seconds longer while it
+  sets this up, and a folder you made read-only no longer stops the game from starting.
+- **Launcher: installed Workshop maps show as installed.** A Workshop map that adds itself to the
+  built-in Standard levels pack (the way most single maps ship) never appeared in the Workshop's
+  *Installed* tab, so it could not be uninstalled on its own, and *Browse* kept offering *Install*
+  after it was installed. The launcher now keeps a record of what each install adds, so the map is
+  listed under its name, uninstalls and restores by itself, and *Browse* marks it *Installed*. The
+  built-in maps beside it are never touched. A map an earlier launcher installed shows up after one
+  *Reinstall*.
+- **Launcher: no older alpha offered on the alpha channel.** A launcher set to the alpha channel offered
+  1.4.0.6013-alpha to a 1.4.0.6062 install — a downgrade — because the team's rule offers the other
+  channel's release whenever the channel differs. An alpha is now offered only when it is newer;
+  switching back to stable is still offered either way.
+
+Saved games from 1.4.0.6062 load unchanged. Going back is one-way for some saves: a save this version makes
+on a level whose script keeps functions (Pandaemonium and Heroes' Journey levels among them) does not
+load in 1.4.0.6062, which cannot read functions kept as text; saves on other levels, the original
+campaign's included, do.
+
 ## 1.4.0.6062 — 2026-11-03 — stable
 
 **Replaces 1.4.0.5660 as the stable release.** Everything the alpha line accumulated from 1.4.0.5696

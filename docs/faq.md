@@ -8,7 +8,10 @@ Yes, and you can switch back. Switching never modifies or deletes a save file â€
 before the October 2026 save format **opens only in the version that wrote it**, and a build from
 before that change cannot read the newer saves at all. Since stable 1.4.0.6062 (3 November 2026)
 both channels use the new format; saves from stable 1.4.0.5660 and earlier are on the other side of
-it.
+it. One newer exception: since stable 1.4.0.6072 a level's script functions are saved as their text,
+so a save on a level whose script keeps functions (Pandaemonium and Heroes' Journey levels among them)
+opens in 1.4.0.6072 and later, but not in 1.4.0.6062 or the 1.4.0.6013 alpha. Saves on other levels
+are not affected.
 
 In practice: a campaign tells you it needs the latest alpha, you switch to alpha, play it, then
 switch back to stable â€” and your stable saves are exactly where you left them. What you cannot do,

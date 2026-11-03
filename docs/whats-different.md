@@ -29,7 +29,7 @@ Wine, and the Linux-specific fixes, hardening and performance work below.
 > | 🐧 | **Ready-to-run Linux builds** — one-file AppImage, Flatpak, and an Arch/AUR package, plus the native Qt launcher (upstream ships source only — no Linux binary in any release) | the whole platform |
 > | 🧹 | **Linux-only source** — every Windows-only file and `#ifdef _WIN32` branch is stripped from the team's code before it is merged (281 files, ~101,000 lines at the switch), [proven](../packaging/linux-only/README.md) not to change what Linux compiles; a guard workflow keeps it from coming back | the whole tree |
 > | 🧮 | **64-bit & Windows-assumption fixes** — the game was written for 32-bit Windows: level-script argument slots, the software rasteriser's carries (creature shadows), signed game-turn arithmetic, movie-recorder and high-score file layouts, campaign progress and save titles written by earlier Linux builds, the light table in saved games, 64-bit config flags (the hand's), a network timeout; plus mod files in any letter case, `\` paths, Korean code page 949, an API-server SIGPIPE | ~20 fixes |
-> | 🛡️ | **Correctness & security hardening** — a multi-agent Linux audit (out-of-bounds writes from crafted maps/mods, union byte-aliasing, format-string bugs) plus a standing sanitizer pass (AddressSanitizer and UndefinedBehaviorSanitizer) that found six memory faults upstream has shipped since as far back as 2008, static analysis and valgrind runs (a heap overflow in map-script fills, mods that froze the game, a leak on every level start), Lua file functions that read but no longer write or delete, and chat and replays that can no longer act on your machine | ~55 fixes |
+> | 🛡️ | **Correctness & security hardening** — a multi-agent Linux audit (out-of-bounds writes from crafted maps/mods, union byte-aliasing, format-string bugs) plus a standing sanitizer pass (AddressSanitizer and UndefinedBehaviorSanitizer) that found six memory faults upstream has shipped since as far back as 2008, static analysis and valgrind runs (a heap overflow in map-script fills, mods that froze the game, a leak on every level start), map scripts that read files but cannot change them, run bytecode or call native code, and chat and replays that can no longer act on your machine | ~60 fixes |
 > | 🎮 | **Gameplay bugs found in players' games** — workers quitting a room they cross or step off, endless scavenger re-enrolment, imps and the computer repeating trips that cannot succeed, trap-crate and hatchery counts, rebirth, doors, explosions, abyss kills, the Call to Arms charge bar, script commands that missed the creatures already on the map, replays that fell a turn behind after a save, creatures choosing steps from leftover memory, and saves on levels that bring their own config files | ~30 fixes |
 > | 💥 | **Crash fixes** — ultrawide creature-possession, UTF-8 fonts, campaign scripts, clean exit, case-sensitive audio, the startup error dialog without libXrandr, Lua errors that closed the game, the creature-list corruption **root-fixed** | ~10 fixes |
 > | ⚡ | **Performance** — frame pacing matched to your monitor, cached parchment map view, per-turn CPU busy-spin, sprite/text blit, GUI hot paths, cached instant-load Workshop | 8 wins |
@@ -38,7 +38,7 @@ Wine, and the Linux-specific fixes, hardening and performance work below.
 > | 🧰 | **Launcher & tooling** — in-launcher Workshop browser + Installed manager, Mod Manager, Play ▾ menu, built-in updater with **separate stable and alpha channels**, side-by-side log viewer, the last five game logs kept, music download + recovery, single-instance lock, weekly sync bot, a weekly Arch library watch | 12+ items |
 >
 > <sub>Count it yourself: `git log --oneline --no-merges --invert-grep --grep='^Linux-Snapshot-Of:' upstream/master..HEAD`
-> — 445 commits on top of the team's master, snapshot commits excluded; 19 of them are the team's own fixes, taken ahead of a
+> — 454 commits on top of the team's master, snapshot commits excluded; 19 of them are the team's own fixes, taken ahead of a
 > sync, and keep their authors. The sections below are the line items.</sub>
 
 ## Every change, area by area
@@ -271,11 +271,15 @@ first.)
   start a lobby's game as if they were the host. Commands that touch this machine's files, settings or
   process now run only when typed on it, a chat message must come from the player it names, and a
   damaged or hostile replay file is refused instead of crashing the game.
-- **Lua's file functions read, they don't write** — level and campaign Lua arrives with downloaded maps
-  and Workshop items, and upstream's sandbox still let one line of it overwrite or delete any file you own
-  through them (or load a native library shipped beside it). Here they only read: writes and deletes are
-  refused the way a failed open always was, and `require` loads no native code. The game's own scripts, and how it
-  saves their state, are unaffected — validated against every Lua file in the game and upstream's tree.
+- **Map scripts stay inside the game** — level, campaign and mod Lua arrives with downloaded maps and
+  Workshop items, and upstream's sandbox still let one line of it overwrite or delete any file you own (or
+  load a native library shipped beside it), call any C function through LuaJIT's FFI, which LuaJIT loads by
+  itself for a literal like `1LL` (the team's issue #5567), and run precompiled bytecode, which LuaJIT does not
+  check: through `loadstring`, a map's own `.lua` files, and the functions saved games and multiplayer resyncs
+  carry. Here scripts read files and cannot change them, the FFI is gone, every loader takes source text only,
+  and scripts loaded after the game's own library get just `debug.traceback` and `debug.getinfo`. Saved games
+  keep a script's functions as their source text instead of bytecode, so they also survive an edit to the
+  script; saves from earlier versions are rebuilt from the scripts without their bytecode ever running.
 - **Hardened against crafted add-ons** — a multi-agent Linux audit found several out-of-bounds writes a
   malicious or buggy campaign/map/mod could trigger (script index checks, `.lif`/`.slx`/texture/palette
   file-load size bounds, PNG sprite & movie buffers) plus more union-aliasing and an unbounded WAV parse.

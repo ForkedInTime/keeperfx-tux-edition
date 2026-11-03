@@ -63,7 +63,7 @@ The download above is **stable**: it only moves once a build has been played and
 launcher's Settings dialog has a release-channel setting, and it only ever offers you releases from the
 channel you picked. The AUR package and the Flatpak follow stable. Not sure? Stay on stable.
 
-**Stable is 1.4.0.6062 (3 November 2026).** The badges above track both channels live.
+**Stable is 1.4.0.6072 (3 November 2026).** The badges above track both channels live.
 
 ## ❓ Help
 
@@ -85,15 +85,15 @@ build; this edition is the Linux half they don't ship, plus the bugs found on th
   that doesn't touch Wine.
 - 🔄 **Kept current** — every week a bot merges the team's latest `master`, with its Windows-only parts
   stripped out and proven not to change the game.
-- 🛠️ **Linux fixes** — ~20 places where code written for 32-bit Windows broke on 64-bit Linux, ~55
-  correctness and security fixes (crafted maps and mods, Lua file functions that let map scripts change your
-  files, chat and replays that could act on your machine), ~30 gameplay bugs found in players' games, and ~10
-  crashes.
+- 🛠️ **Linux fixes** — ~20 places where code written for 32-bit Windows broke on 64-bit Linux, ~60
+  correctness and security fixes (crafted maps and mods, map scripts that could change your files or run code
+  outside the game, chat and replays that could act on your machine), ~30 gameplay bugs found in players'
+  games, and ~10 crashes.
 - ⚡ **Performance** — frame pacing matched to your monitor, and the map view no longer costs a processor core.
 - 🧰 **Launcher** — Workshop browser, Mod Manager, and a built-in updater with separate stable and alpha
   channels.
 
-445 commits on top of the team's `master`. **[Everything, item by item »](docs/whats-different.md)**
+454 commits on top of the team's `master`. **[Everything, item by item »](docs/whats-different.md)**
 
 ## Credit
 
