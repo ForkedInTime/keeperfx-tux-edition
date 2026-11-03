@@ -3,7 +3,6 @@ ffmpeg libavformat.so=63-64
 ffmpeg libavutil.so=61-64
 ffmpeg libswresample.so=7-64
 ffmpeg libswscale.so=10-64
-libepoxy libepoxy.so=0-64
 libnatpmp libnatpmp.so.1
 libspng libspng.so=0-64
 luajit libluajit-5.1.so.2
