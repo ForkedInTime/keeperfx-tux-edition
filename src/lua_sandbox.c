@@ -53,6 +53,8 @@
 /******************************************************************************/
 
 static const char sb_binary_refused[] = "attempt to load a binary chunk (bytecode is not accepted)";
+/* Without a name loadfile and dofile read standard input, which in a game only blocks it */
+static const char sb_stdin_refused[] = "loadfile and dofile need a file name";
 
 /** Registry keys: the game's own library files (real path -> module name), and whether the
  *  debug library has been cut down for the scripts that load after it. */
@@ -76,10 +78,12 @@ static int sb_mode_allows_text(lua_State *L, int idx)
     return strchr(mode, 't') != NULL;
 }
 
-/** The optional env argument at idx becomes the environment of the function on top. */
+/** The env argument at idx, if it is a table, becomes the environment of the function on top
+ *  (as LuaJIT's load_aux: anything else is ignored). Callers settop() their arguments first, so
+ *  idx is the argument and never something pushed since. */
 static void sb_set_env(lua_State *L, int idx)
 {
-    if (!lua_isnoneornil(L, idx))
+    if (lua_istable(L, idx))
     {
         lua_pushvalue(L, idx);
         lua_setfenv(L, -2);
@@ -98,6 +102,7 @@ static int sb_loadstring(lua_State *L)
 /** load(chunk [, chunkname [, mode [, env]]]); chunk is a string or a function returning pieces */
 static int sb_load(lua_State *L)
 {
+    lua_settop(L, 4);
     if (!sb_mode_allows_text(L, 3))
     {
         lua_pushnil(L);
@@ -105,7 +110,7 @@ static int sb_load(lua_State *L)
         return 2;
     }
     int status;
-    if (lua_type(L, 1) == LUA_TSTRING)
+    if ((lua_type(L, 1) == LUA_TSTRING) || (lua_type(L, 1) == LUA_TNUMBER))
     {
         size_t len;
         const char *s = lua_tolstring(L, 1, &len);
@@ -151,11 +156,12 @@ static int sb_load(lua_State *L)
 /** loadfile([filename [, mode [, env]]]) */
 static int sb_loadfile(lua_State *L)
 {
+    lua_settop(L, 3);
     const char *fname = luaL_optstring(L, 1, NULL);
-    if (!sb_mode_allows_text(L, 2))
+    if (!sb_mode_allows_text(L, 2) || (fname == NULL))
     {
         lua_pushnil(L);
-        lua_pushstring(L, sb_binary_refused);
+        lua_pushstring(L, (fname == NULL) ? sb_stdin_refused : sb_binary_refused);
         return 2;
     }
     int status = luaL_loadfilex(L, fname, "t");
@@ -168,6 +174,8 @@ static int sb_loadfile(lua_State *L)
 static int sb_dofile(lua_State *L)
 {
     const char *fname = luaL_optstring(L, 1, NULL);
+    if (fname == NULL)
+        return luaL_error(L, "%s", sb_stdin_refused);
     int base = lua_gettop(L);
     if (luaL_loadfilex(L, fname, "t") != 0)
         return lua_error(L);

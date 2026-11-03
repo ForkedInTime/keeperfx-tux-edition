@@ -258,14 +258,68 @@ local function span_text(lines, first, last, s, e)
     return table.concat(parts, "\n")
 end
 
+-- The top function's instructions in fn's stripped dump, with its constant counts
+local function top_instructions(fn)
+    local ok, s = pcall(dump, fn, true)
+    if not ok then
+        return nil
+    end
+    local _, i = read_uleb(s, 5)
+    local top
+    while i do
+        local len, j = read_uleb(s, i)
+        if not len or len == 0 then
+            break
+        end
+        top, i = j, j + len
+    end
+    if not top then
+        return nil
+    end
+    local kgc, q = read_uleb(s, top + 4)
+    local kn, nbc
+    kn, q = read_uleb(s, q)
+    nbc, q = read_uleb(s, q)
+    return kgc .. "," .. kn .. ";" .. s:sub(q, q + nbc * 4 - 1)
+end
+
+-- What a chunk made by compile_function compiles to when its text is one function expression:
+-- the stand-in locals, then the closure returned (the same for any function, given the count)
+local expression_shapes = {}
+local function expression_shape(prelude, count)
+    if not expression_shapes[count] then
+        expression_shapes[count] = top_instructions(load(prelude .. "return function() end", "=shape", "t"))
+    end
+    return expression_shapes[count]
+end
+
+-- "function f(x)" -> "function(x)", "function a.b:c(x)" -> "function(self, x)": a named definition
+-- (local function f, function M.f) as the expression it compiles the same as
+local function as_expression(text)
+    local name, rest = text:match("^function%s+([%a_][%w_%.:]*)%s*%((.*)$")
+    if not name then
+        return text
+    end
+    if name:find(":", 1, true) then
+        return "function(self" .. (rest:match("^%s*%)") and "" or ", ") .. rest
+    end
+    return "function(" .. rest
+end
+
 -- Compiles function text as the expression it was, on its own line so that errors and tracebacks
 -- point where they always did. Its upvalues are declared as locals right before it, so that it
--- captures them as upvalues again rather than reading globals of the same names.
+-- captures them as upvalues again rather than reading globals of the same names. The chunk only
+-- runs once it is known to do nothing but return that one function: a saved game's text is not
+-- run as code, whatever it says.
 local function compile_function(text, names, chunkname, line)
     local prelude = (#names > 0) and ("local " .. table.concat(names, ", ") .. " ") or ""
     local chunk, err = load(string.rep("\n", line - 1) .. prelude .. "return " .. text, chunkname, "t", _G)
     if not chunk then
         return nil, err
+    end
+    local shape = expression_shape(prelude, #names)
+    if not shape or top_instructions(chunk) ~= shape then
+        return nil, "the text is not a single function"
     end
     local ok, fn = pcall(chunk)
     if not ok then
@@ -284,7 +338,7 @@ local function each_span(lines, first, last)
         for _, st in ipairs(word_positions(lines[first], "function")) do
             for k = #ends, 1, -1 do
                 if first ~= last or ends[k][1] > st[2] then
-                    coroutine.yield(span_text(lines, first, last, st[1], ends[k][2]))
+                    coroutine.yield(as_expression(span_text(lines, first, last, st[1], ends[k][2])))
                 end
             end
         end
@@ -366,6 +420,8 @@ local function make_stub(where, reason)
     return stub
 end
 
+local encoded = 0 -- functions written by the current GetSerializedData
+
 local function encode_function(fn)
     local def = definitions[fn]
     if def == nil then
@@ -379,13 +435,16 @@ local function encode_function(fn)
         definitions[fn] = def
     end
     if def.stub then
+        encoded = encoded + 1
         return { stub = true, where = def.where, reason = def.reason }
     end
     local up = {}
     for i, name in ipairs(def.names) do
         local _, value = debug.getupvalue(fn, i)
-        up[i] = { name = name, value = is_plain(value) and value or nil }
+        -- itself: a local function calling itself by name
+        up[i] = { name = name, value = is_plain(value) and value or nil, self = (value == fn) or nil }
     end
+    encoded = encoded + 1
     return { src = def.src, chunk = def.chunk, line = def.line, up = up }
 end
 
@@ -419,8 +478,12 @@ local function decode_function(spec)
         return make_stub(where, err)
     end
     for i, uv in ipairs(up) do
-        if is_plain(uv.value) and debug.getupvalue(fn, i) == uv.name then
-            debug.setupvalue(fn, i, uv.value)
+        if debug.getupvalue(fn, i) == uv.name then
+            if uv.self == true then
+                debug.setupvalue(fn, i, fn)
+            elseif is_plain(uv.value) then
+                debug.setupvalue(fn, i, uv.value)
+            end
         end
     end
     definitions[fn] = { src = src, chunk = chunk, line = line, names = names }
@@ -605,7 +668,13 @@ end
 
 function GetSerializedData()
     assert(type(Game) == "table", "Game state must be a table")
+    encoded = 0
     local ok, result = pcall(binser.serialize, Game, serialization_version)
+    if ok and encoded == 0 then
+        -- No function in it: the same data in version 3, which 1.4.0.6062 and earlier can read too
+        -- (the engine updates keep as the previous one); version 3 only ever differed in functions
+        ok, result = pcall(binser.serialize, Game, legacy_serialization_version)
+    end
     if not ok then
         error("binser failed: " .. tostring(result))
     end

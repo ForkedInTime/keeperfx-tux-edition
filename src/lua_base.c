@@ -222,6 +222,31 @@ void close_lua_script()
 }
 
 
+/* This edition: the path the game's own library (fxdata/lua/init.lua) loads with: fxdata alone,
+ * so that no campaign or level file of the same name stands in for one of its modules while the
+ * full debug library is still there (lua_sandbox.c). The default path it replaces is kept in
+ * default_path for setLuaPath() to build on once the library has loaded. */
+static void setLuaLibraryPath(lua_State *L, char *default_path, size_t len)
+{
+    char fx_data_path[4096];
+    prepare_file_path_buf(fx_data_path, sizeof(fx_data_path), FGrp_FxData, "lua/?.lua");
+    lua_getglobal(L, "package");
+    lua_getfield(L, -1, "path");
+    snprintf(default_path, len, "%s", lua_tostring(L, -1) ? lua_tostring(L, -1) : "");
+    lua_pop(L, 1);
+    lua_pushstring(L, fx_data_path);
+    lua_setfield(L, -2, "path");
+    lua_pop(L, 1);
+}
+
+static void restoreLuaDefaultPath(lua_State *L, const char *default_path)
+{
+    lua_getglobal(L, "package");
+    lua_pushstring(L, default_path);
+    lua_setfield(L, -2, "path");
+    lua_pop(L, 1);
+}
+
 int setLuaPath( lua_State* L)
 {
     #define PATH_LENGTH 4096
@@ -511,7 +536,8 @@ TbBool open_lua_script(LevelNumber lvnum)
 
     reg_host_functions(Lvl_script);
 
-    setLuaPath(Lvl_script);
+    char default_path[4096];
+    setLuaLibraryPath(Lvl_script, default_path, sizeof(default_path));
 
     char* fname = prepare_file_fmtpath(FGrp_FxData, "lua/init.lua");
 
@@ -527,8 +553,11 @@ TbBool open_lua_script(LevelNumber lvnum)
         return false;
     }
     // The game's own library has kept what it needs of the debug library; campaigns, maps and
-    // mods, loaded below, get only debug.traceback and debug.getinfo (lua_sandbox.c)
+    // mods, loaded below, get only debug.traceback and debug.getinfo (lua_sandbox.c), and the
+    // full module path: their level and campaign folders first
     lua_sandbox_close_debug(Lvl_script);
+    restoreLuaDefaultPath(Lvl_script, default_path);
+    setLuaPath(Lvl_script);
 
     fname = prepare_file_fmtpath(FGrp_CmpgConfig, "lua/init.lua");
     if (LbFileExists(fname))
