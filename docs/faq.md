@@ -6,8 +6,9 @@
 
 Yes, and you can switch back. Switching never modifies or deletes a save file — but a save made
 before the October 2026 save format **opens only in the version that wrote it**, and a build from
-before that change cannot read the newer saves at all. While one channel is on each side of it,
-saves do not travel between them.
+before that change cannot read the newer saves at all. Since stable 1.4.0.6062 (3 November 2026)
+both channels use the new format; saves from stable 1.4.0.5660 and earlier are on the other side of
+it.
 
 In practice: a campaign tells you it needs the latest alpha, you switch to alpha, play it, then
 switch back to stable — and your stable saves are exactly where you left them. What you cannot do,

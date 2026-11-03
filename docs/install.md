@@ -84,7 +84,9 @@ ever ask for the first; pacman brings the other two, and an upgrade keeps the pr
 your saves stay playable.
 
 On first launch the game directory is assembled at `~/.local/share/keeperfx-alpha` (set `KEEPERFX_HOME`
-to put it elsewhere). The folder is named after this project's first name and keeps it, stable and
+to put it elsewhere). If an AppImage ran there before, the package replaces the copies of its files that
+the AppImage left: identical ones become links, anything else is moved to `.replaced-by-package/` in that
+folder, never deleted. The folder is named after this project's first name and keeps it, stable and
 alpha alike: it is where every install keeps its saves. **You still need to own the original game**,
 same as every other install method here: 14 files from your *Dungeon Keeper* CD or GOG/Steam/EA copy are
 not redistributable, so they are not in any package. If they are missing the game names them exactly

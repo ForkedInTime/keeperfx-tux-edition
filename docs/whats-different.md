@@ -29,16 +29,16 @@ Wine, and the Linux-specific fixes, hardening and performance work below.
 > | 🐧 | **Ready-to-run Linux builds** — one-file AppImage, Flatpak, and an Arch/AUR package, plus the native Qt launcher (upstream ships source only — no Linux binary in any release) | the whole platform |
 > | 🧹 | **Linux-only source** — every Windows-only file and `#ifdef _WIN32` branch is stripped from the team's code before it is merged (281 files, ~101,000 lines at the switch), [proven](../packaging/linux-only/README.md) not to change what Linux compiles; a guard workflow keeps it from coming back | the whole tree |
 > | 🧮 | **64-bit & Windows-assumption fixes** — the game was written for 32-bit Windows: level-script argument slots, the software rasteriser's carries (creature shadows), signed game-turn arithmetic, movie-recorder and high-score file layouts, campaign progress and save titles written by earlier Linux builds, the light table in saved games, 64-bit config flags (the hand's), a network timeout; plus mod files in any letter case, `\` paths, Korean code page 949, an API-server SIGPIPE | ~20 fixes |
-> | 🛡️ | **Correctness & security hardening** — a multi-agent Linux audit (out-of-bounds writes from crafted maps/mods, union byte-aliasing, format-string bugs) plus a standing sanitizer pass (AddressSanitizer and UndefinedBehaviorSanitizer) that found six memory faults upstream has shipped since as far back as 2008, map scripts that can read files but not change them, and chat and replays that can no longer act on your machine | ~40 fixes |
-> | 🎮 | **Gameplay bugs found in players' games** — workers quitting a room they cross or step off, endless scavenger re-enrolment, imps and the computer repeating trips that cannot succeed, trap-crate and hatchery counts, rebirth, doors, explosions, abyss kills, the Call to Arms charge bar, script commands that missed the creatures already on the map, and replays that fell a turn behind after a save | ~25 fixes |
-> | 💥 | **Crash fixes** — ultrawide creature-possession, UTF-8 fonts, campaign scripts, clean exit, case-sensitive audio, the startup error dialog without libXrandr, the creature-list corruption **root-fixed** | ~8 fixes |
+> | 🛡️ | **Correctness & security hardening** — a multi-agent Linux audit (out-of-bounds writes from crafted maps/mods, union byte-aliasing, format-string bugs) plus a standing sanitizer pass (AddressSanitizer and UndefinedBehaviorSanitizer) that found six memory faults upstream has shipped since as far back as 2008, static analysis and valgrind runs (a heap overflow in map-script fills, mods that froze the game, a leak on every level start), Lua file functions that read but no longer write or delete, and chat and replays that can no longer act on your machine | ~55 fixes |
+> | 🎮 | **Gameplay bugs found in players' games** — workers quitting a room they cross or step off, endless scavenger re-enrolment, imps and the computer repeating trips that cannot succeed, trap-crate and hatchery counts, rebirth, doors, explosions, abyss kills, the Call to Arms charge bar, script commands that missed the creatures already on the map, replays that fell a turn behind after a save, creatures choosing steps from leftover memory, and saves on levels that bring their own config files | ~30 fixes |
+> | 💥 | **Crash fixes** — ultrawide creature-possession, UTF-8 fonts, campaign scripts, clean exit, case-sensitive audio, the startup error dialog without libXrandr, Lua errors that closed the game, the creature-list corruption **root-fixed** | ~10 fixes |
 > | ⚡ | **Performance** — frame pacing matched to your monitor, cached parchment map view, per-turn CPU busy-spin, sprite/text blit, GUI hot paths, cached instant-load Workshop | 8 wins |
 > | 🎨 | **Graphics & audio** — upstream's OpenGL renderer built into the Linux binary (opt-in), front-end movies in any codec, your own music in any filenames and any of OGG/FLAC/WAV/MP3, a real window icon and desktop identity on X11 *and* Wayland, artwork (and the game's text) regenerated from upstream's sources on every build | 5 items |
 > | 🌐 | **Multiplayer map packs** — the Classic, Modern and Original mappacks now load in every install method | 1 fix |
 > | 🧰 | **Launcher & tooling** — in-launcher Workshop browser + Installed manager, Mod Manager, Play ▾ menu, built-in updater with **separate stable and alpha channels**, side-by-side log viewer, the last five game logs kept, music download + recovery, single-instance lock, weekly sync bot, a weekly Arch library watch | 12+ items |
 >
 > <sub>Count it yourself: `git log --oneline --no-merges --invert-grep --grep='^Linux-Snapshot-Of:' upstream/master..HEAD`
-> — 429 commits on top of the team's master, snapshot commits excluded; 18 of them are the team's own fixes, taken ahead of a
+> — 445 commits on top of the team's master, snapshot commits excluded; 19 of them are the team's own fixes, taken ahead of a
 > sync, and keep their authors. The sections below are the line items.</sub>
 
 ## Every change, area by area
@@ -151,7 +151,7 @@ Wine, and the Linux-specific fixes, hardening and performance work below.
 - **Read the logs without leaving the launcher.** Play ▾ → **View logs** shows the launcher log and
   the game log side by side, following live, with a Copy button — and errors now offer a **Show log**
   button directly. The news panel lists this fork's releases (version and date, one line each, the
-  full changelog one click away) above the KeeperFX team's news.
+  full changelog one click away, stable ones with a golden keeper) above the KeeperFX team's news.
 - **One launcher at a time.** The launcher won't open a second copy of itself (that would let two games fight
   over the same saves).
 - **Accessibility — launcher size.** Scale the whole launcher UI (100 %, 110 %, 125 % … up to 200 %) for
@@ -204,11 +204,18 @@ first.)
   left out; `MOVE_CREATURE` for `ALL_PLAYERS` spawned a stray effect; removing a sacrifice recipe from a
   full table doubled the last one; Lua lost `os.date` (Pandaemonium's second level stopped setting
   itself up); `DESCRIPTION_GEO` boxes with a 0 or missing value were drawn at random places; an
-  objective at a destroyed heart had no location.
+  objective at a destroyed heart had no location; `SET_POWER_CONFIGURATION` set 0 for five of its
+  fields, a power's top overcharge level charged its duration as the price, a matching `BLOCKED_PICKUP`
+  hand rule blocked instead of lifting the block, and party range checks could never be true.
+- **Levels with their own config files:** loading a save on one read the campaign's rules, objects and
+  slabs instead of the level's (Pandaemonium level 4 fired its final assault on the reload) — the
+  team's fix, taken ahead of a sync.
 - **Replays:** every campaign level records one, and a level saved part-way through replayed a turn
   behind from the save on ("Out of sync" on every turn, every later move a turn early); rewinding
   (Backspace) across any pause dropped you to the main menu. The fix is in the reader, so recordings
-  made before it replay in step past their saves too.
+  made before it replay in step past their saves too. And creatures chose some steps from leftover
+  memory — 52 height lookups, a temple sacrifice drop, a room spot, a wall-hug step — so replays and
+  multiplayer peers drifted apart; each now starts from the creature's own position.
 
 **Stability & security fixes** *(genuine upstream bugs fixed locally, plus faults in this fork's own Linux layer; two were reported upstream in June 2026, nothing since)*
 - **Files that came along for the ride are no longer treated as content.** Archives built on macOS or
@@ -229,6 +236,14 @@ first.)
   aborted the game at a level transition. Rooms now sever their workers on deletion, the list head is
   only rewritten when the room agrees, and orphaned creatures detach themselves. The ~18 guarded list
   walks stay as the last line of defence, and the fault exists in upstream KeeperFX to this day.
+- **Lua errors no longer close the game.** A failed Lua command — from the console, a map script or a
+  mod's hook — left Lua's stack a slot lower each time, and on the sixth LuaJIT exited: the game closed
+  with nothing in the log and nothing saved. A mod's hook that fails runs every turn, so a broken mod
+  ended the game within a few.
+- **Static analysis and valgrind, every finding checked against the code.** A heap overflow when a map
+  script fills a large area, mods that froze the game at load (a 256th room type) or hung first-person
+  digging, room teardown and route lookups that trusted corrupt data, and a memory leak on every level
+  start in the TOML parser, which the sanitizer pass now covers too.
 - **Six memory faults found by our sanitizer pass** — the engine builds under AddressSanitizer and
   UndefinedBehaviorSanitizer, and every campaign is run through it before a stable release. Its first
   runs caught an array overflow on every game start, out-of-bounds reads on every level load and script
@@ -256,10 +271,10 @@ first.)
   start a lobby's game as if they were the host. Commands that touch this machine's files, settings or
   process now run only when typed on it, a chat message must come from the player it names, and a
   damaged or hostile replay file is refused instead of crashing the game.
-- **Map scripts can read files, not change them** — level and campaign Lua arrives with downloaded maps
+- **Lua's file functions read, they don't write** — level and campaign Lua arrives with downloaded maps
   and Workshop items, and upstream's sandbox still let one line of it overwrite or delete any file you own
-  (or load a native library shipped beside it). Here scripts can only read: writes and deletes are refused
-  the way a failed open always was, and `require` loads no native code. The game's own scripts, and how it
+  through them (or load a native library shipped beside it). Here they only read: writes and deletes are
+  refused the way a failed open always was, and `require` loads no native code. The game's own scripts, and how it
   saves their state, are unaffected — validated against every Lua file in the game and upstream's tree.
 - **Hardened against crafted add-ons** — a multi-agent Linux audit found several out-of-bounds writes a
   malicious or buggy campaign/map/mod could trigger (script index checks, `.lif`/`.slx`/texture/palette

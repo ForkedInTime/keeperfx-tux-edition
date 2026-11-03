@@ -4,6 +4,120 @@ This tracks the changes in *this* fork on top of the KeeperFX team's `master`.
 Version numbers follow the engine build (`<major>.<minor>.<release>.<build>`), with
 `alpha` appended on the alpha channel and nothing appended on the stable one.
 
+## 1.4.0.6062 — 2026-11-03 — stable
+
+**Replaces 1.4.0.5660 as the stable release.** Everything the alpha line accumulated from 1.4.0.5696
+to 1.4.0.6013 (below), plus the fixes made since 6013 (listed here), promoted after a full pass:
+static analysis of the engine with every finding checked against the code, valgrind on 35 levels for
+15 minutes each, every campaign under AddressSanitizer and UndefinedBehaviorSanitizer, all 35 level
+starts, six replays played back in step, a ten-minute multiplayer game, save and load on eight levels
+and on copies of players' saves, the AppImage started on Ubuntu 24.04, Debian 13 and Fedora 41, the
+Arch packages upgraded from the real 5660 ones, and many hours of play on the alpha line.
+
+> **Saved games from 1.4.0.5660 and earlier cannot be loaded by this release — for the last time.**
+> From this release on a saved game describes its own layout and is read field by field, so saves made
+> with it keep loading in later versions. Your 5660 saves stay on disk and are listed greyed out under
+> their titles; they still open in 5660, which updating keeps (`keeperfx-tux-previous` on Arch,
+> `previous/` beside the game for the AppImage and Flatpak). Finish a level in progress on 5660 first,
+> or replay it from its start. **Campaign progress — Continue, completed levels, bonus levels and the
+> creatures carried to the next level — carries over, and so do high scores.** The release notes
+> repeat this automatically.
+
+In short, since 5660:
+
+- **Two months of the team's work.** Five syncs through 19 October and fixes from the week after:
+  their OpenGL renderer (opt-in with `RENDERER=OPENGL`; the software renderer stays the default), the
+  new save format, a progress file per campaign, a replay recorded for every campaign level (zoom,
+  pause, hold Backspace to rewind), claimed rooms that merge with their neighbours, multiplayer
+  spectators and colours picked in the lobby, desync fixes, and much else.
+- **No Windows in this repository.** The team's code is merged with its Windows-only parts removed,
+  proven not to change what Linux compiles.
+- **Bugs from players' games.** Workers quitting a room they cross, scavengers taken out of their room
+  every 20 turns, imps fetching crates for traps they cannot reach, hatchery counts, rebirth, magic
+  doors, explosions, abyss kills, script commands that missed the creatures already on the map.
+- **Security.** Chat and replays can no longer act on your machine, and Lua's own file functions no
+  longer let a map script write or delete your files.
+- **64-bit fixes.** Creature shadows in the software renderer, level-script effects, timers, movie
+  recording, high-score files, the light table in saved games, the hand's config flags.
+- **Launcher.** Renderer, map fade, viewport mode, zoom distance and replay settings; a golden keeper
+  for stable releases in the news; Save no longer switches settings off on an older config (below).
+
+**Since 1.4.0.6013-alpha:**
+
+- **The game no longer closes after a few Lua errors.** When a Lua command failed — typed in the
+  console, or a map script's `RUN_LUA_CODE` — the engine took two values off Lua's stack where a failed
+  command leaves one. Each failure sank the stack a slot, and on the sixth LuaJIT exited: the game
+  closed with nothing in the log but "Application exit called", and nothing was saved. A mod's Lua hook
+  (creature states; object, trap, door and shot updates; trap activation; shot hits) that raised an
+  error did the same every turn, and took its result from below the stack (for an object's update, a
+  negative value means "deleted"). Measured: 40 failing commands and 40 that return values, and an
+  object whose update always fails for 20 seconds, with the game and Lua still running. Upstream has
+  the same bugs.
+- **Saved games on levels with their own config files read those files again** — the team's fix
+  (#5550), taken ahead of the next sync. A save stored the "selected level" as 0, so loading one read
+  `map00000.*` instead of the level's own rules, objects, slabs or creatures. On Pandaemonium level 4
+  the reload fired the level's final assault at once (hero creatures on the map 61 → 77). Heroes'
+  Journey, Pandaemonium, Sapphire Realms and some personal levels ship such files.
+- **Creatures no longer choose a step from leftover memory.** 52 height lookups built their position
+  from x and y only, and so did a temple sacrifice drop, a room spot for a new imp and a wall-hug step:
+  whatever the stack held decided the outcome, so replays and multiplayer peers drifted apart (a level
+  220 replay went out of sync at turn 6,200). valgrind on that replay: 36 uninitialised-value errors
+  before, none now. Replay files no longer carry unset bytes in their header either. A replay recorded
+  by an earlier version can go out of sync part-way through.
+- **A level saved part-way through replays in step.** The save put every replay of that level a turn
+  behind from that point ("Out of sync" on every turn, every later move a turn early), and rewinding
+  (hold Backspace) across any pause dropped you to the main menu. The fix is in the reader, so earlier
+  recordings with a save in them replay correctly too.
+- **Map-script fills over a large area no longer write past their buffer.** `CHANGE_SLAB_OWNER`,
+  `CHANGE_SLAB_TYPE`, `CHANGE_SLAB_TEXTURE` and reveal fills kept a 16-bit entry per slab in room for
+  one byte per slab. No shipped level comes close (the largest of the 111 shipped fills needs 52).
+- **Mods that hang the game or reach past a buffer.** A mod defining a 256th room type froze the game
+  at load; the count is now capped at 255 with a warning, as `NEW_ROOM_TYPE` already does. A dig shot
+  with a modded Health of 256 or more could hang first-person digging. Room teardown on a corrupted
+  slab list, two route lookups, a negative effect id and a path helper no longer write or read past
+  their buffers.
+- **Map-script settings that did nothing.** `SET_POWER_CONFIGURATION` set 0 for Spell, Effect,
+  UseFunction, CreatureType and CostFormula (and Spell wrote the cooldown); a power's top overcharge
+  level charged its duration as the price; a matching `BLOCKED_PICKUP` hand rule blocked instead of
+  lifting the block; party range checks could never be true.
+- **No memory leak on every level start.** The TOML parser that reads the slab, column, effect and
+  level files kept every table name: 92–124 KB per level start. The sanitizer pass now checks that
+  parser too. A campaign without a credits line (revlord) no longer opens a folder as its credits.
+- **The hand keeps its object flags after a one-flag Castability change.** On 64-bit Linux, config
+  fields of type `long` were read back as 32 bits, so `Castability = <FLAG> 1` in a mod, a campaign's
+  `magic.cfg` or a map script wiped flags 32–40: picking up and slapping objects. Stable 5660 has the
+  same bug. Also the team's fix for the minimap zooming fully in when a save loads (#5540), taken early.
+- **The game keeps its last five logs** (`keeperfx.log.1` to `.5`); every start used to overwrite the
+  log of the run before.
+- **Found by the sanitizers:** a multiplayer host read before the start of the session list on every
+  lobby update, and a game folder whose log path came to exactly 144 characters wrote a byte past a
+  buffer.
+- **The startup error dialog shows without libXrandr.** On a system without it (a minimal Fedora, for
+  one) the AppImage's engine segfaulted instead of saying why it could not start — the known issue in
+  the 1.4.0.5652 notes. The AppImage now carries libXrandr.
+- **Arch: the package replaces copies an AppImage left in the game folder.** They shadowed every
+  package upgrade (August artwork, no scrollbar on the Load menu). Identical copies become links;
+  anything else is moved to `.replaced-by-package/`, never deleted. A weekly check now flags an Arch
+  library update that would need the engine rebuilt.
+- **Launcher: Save keeps the game's defaults.** A `keeperfx.cfg` older than a setting has no line for
+  it, and the game uses its default; the Settings dialog read the missing line as off or empty, and
+  Save wrote that back: VSync, relative mouse mode (the cursor jumped on Wayland), delta time, edge
+  panning and the possession cursor lock off, the startup screens and the zoom limit gone, and the
+  creature flower, select box, hand sizes and API port saved empty, which the game reads as 0. A config
+  already saved that way keeps its values: tick **Relative mouse mode** (Input) and **Enable VSync**
+  (Graphics) once.
+- **Launcher:** stable releases in the news panel carry a golden keeper; alphas keep the red one.
+- **Quieter logs:** a boulder sinking into lava, deleting a switched-off light and moving crates off a
+  lost workshop slab no longer log errors.
+- Downloads are named `KeeperFX-Tux-Edition-x86_64.AppImage` and `.flatpak`; the AppImage is attached
+  under its old name too.
+
+Known:
+- With `RENDERER=OPENGL`, movies play in 256 colours; the software renderer plays them in full colour.
+- With *Automatically determine max. FPS* on, the frame cap can step down after a level loads (to
+  72, 48 or 36 fps on a 144 Hz display) and take a while to come back. A fixed rate is never adjusted:
+  untick it on the Graphics tab and set Max. FPS to your display's rate, or use the OpenGL renderer.
+
 ## 1.4.0.6013 — 2026-10-23 — alpha
 
 - **Movies play in full colour again.** Every movie the game ships — the intro, the logo stings, the
