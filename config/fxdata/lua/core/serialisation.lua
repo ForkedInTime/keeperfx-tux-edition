@@ -149,8 +149,10 @@ local function read_uleb(s, i)
 end
 
 -- A dump's prototypes without what differs between a function and a copy compiled from the same
--- text: the dump's header and debug info, and the top function's upvalue descriptors (they name a
--- local of the enclosing function, which a copy compiled with stand-in locals has elsewhere).
+-- text: the dump's header and debug info, the top function's upvalue descriptors (they name a
+-- local of the enclosing function, which a copy compiled with stand-in locals has elsewhere), and
+-- the flag bits LuaJIT changes at run time (the top ones count the closures made from the
+-- prototype: seven triggers registered from one line of Events.lua leave it at 4).
 -- Takes stripped and full dumps alike, so a full dump from an old save compares with a stripped
 -- dump of a candidate. Reads bytes only: a dump given here is never loaded.
 local function normalized_code(s)
@@ -200,6 +202,8 @@ local function normalized_code(s)
         if not q or stop - dbg < q then
             return nil
         end
+        -- flags: keep inner functions, vararg and FFI constants (lj_obj.h PROTO_CHILD|VARARG|FFI)
+        hdr = string.char(hdr:byte(1) % 8) .. hdr:sub(2)
         protos[#protos + 1] = { head = hdr .. kgc .. "," .. kn .. "," .. nbc, body = s:sub(q, stop - dbg - 1),
                                 nbc = nbc, nuv = hdr:byte(4) }
         i = stop
