@@ -831,11 +831,17 @@ void RendererOpenGL::EndFrame()
 
 bool RendererOpenGL::PresentImage(const struct RendererPresentImageDesc* desc)
 {
-    // The image pass samples its source through the palette, so it takes
-    // indexed images only; a movie offered as RGB24 falls back to 8-bit.
-    if (m_impl == nullptr || !m_impl->imgpresent.IsReady() ||
-        desc == nullptr || desc->format != PRESENT_FORMAT_INDEXED8)
+    // Indexed images go through the palette; a true-colour (RGB24) movie frame
+    // gets a texture and shader of its own, opaque presents only. Refusing one
+    // makes the movie player fall back to 256 colours for the rest of the movie.
+    if (m_impl == nullptr || !m_impl->imgpresent.IsReady() || desc == nullptr)
         return false;
+    if (desc->format == PRESENT_FORMAT_RGB24) {
+        if (desc->kind != PRESENT_KIND_OPAQUE || !m_impl->imgpresent.CanPresentTrueColour())
+            return false;
+    } else if (desc->format != PRESENT_FORMAT_INDEXED8) {
+        return false;
+    }
     m_impl->imgpresent.Submit(desc);
     return true;
 }

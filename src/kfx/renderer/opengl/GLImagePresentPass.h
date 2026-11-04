@@ -2,8 +2,9 @@
 // Dungeon Keeper - Renderer Abstraction Layer
 /******************************************************************************/
 /** @file GLImagePresentPass.h
- *     GPU-native present of a raw indexed8 image (FMV frame, splash
- *     bitmap) at an arbitrary destination rect -- the GL side of
+ *     GPU-native present of a raw indexed8 image (splash bitmap, Smacker
+ *     frame) or a true-colour RGB24 movie frame at an arbitrary destination
+ *     rect -- the GL side of
  *     RendererOpenGL::PresentImage()/RendererPresentImageDesc 
  *     ToDo : replace with Rendergraph impl?
  */
@@ -22,7 +23,8 @@ struct IRImagePresentCmd {
     bool active = false;
     int dst_x = 0, dst_y = 0, dst_w = 0, dst_h = 0;
     int src_w = 0, src_h = 0;
-    std::vector<unsigned char> pixels; // tightly packed, src_w * src_h, indexed8
+    int format = 0; // PRESENT_FORMAT_*: INDEXED8 (1 byte per pixel) or RGB24 (3, opaque slot only)
+    std::vector<unsigned char> pixels; // tightly packed, src_w * src_h pixels of `format`
 
     int palette = 0;
     std::vector<unsigned char> embedded_palette; // 256*4 BGRA, PRESENT_PALETTE_EMBEDDED only
@@ -55,6 +57,9 @@ public:
     /** True once CompileShaders() has succeeded -- without it
      *  RendererOpenGL::PresentImage() draws nothing. */
     bool IsReady() const { return m_shader_handle != kInvalidGpuResource; }
+
+    /** True when the true-colour movie program compiled (RGB24 presents). */
+    bool CanPresentTrueColour() const { return m_rgb_shader_handle != kInvalidGpuResource; }
 
     /** Shared 256x1 RGBA8 palette texture (same one world/UI already bind)
      *  -- used for every present except PRESENT_PALETTE_EMBEDDED, which
@@ -116,13 +121,18 @@ private:
     void upload_overlay_coverage_texture(); // overlay coverage -> m_coverage_tex_handle
     void upload_opaque_texture(size_t idx); // m_rt_cmds[idx].pixels -> m_opaque_slots[idx].tex_handle
     void upload_zoom_texture();     // landview image -> m_zoom_tex_handle (only when a new copy arrived)
+    void upload_video_texture(size_t idx);  // m_rt_cmds[idx] RGB24 pixels -> m_video_tex_handle
     void upload_embedded_palette(const std::vector<unsigned char>& embedded_palette); // -> m_embedded_palette_tex_handle
     void draw_quad(GLuint program, GLuint image_tex, GLuint palette_tex,
                   int dst_x, int dst_y, int dst_w, int dst_h, int screen_w, int screen_h,
                   GLuint coverage_tex = 0);
 
-    /** Game-thread-only. Creates `handle` on first call, or reloads it. */
-    void EnsureImageTextureHandle(GpuResourceHandle& handle, int& gt_w, int& gt_h, int new_w, int new_h);
+    /** Game-thread-only. Creates `handle` on first call, or reloads it.
+     *  Palette-index images are R8 sampled nearest (pixel art); a true-colour
+     *  movie frame is RGBA8 sampled linearly (filmed footage, scaled smoothly,
+     *  the same choice the software backend makes for its movie texture). */
+    void EnsureImageTextureHandle(GpuResourceHandle& handle, int& gt_w, int& gt_h, int new_w, int new_h,
+                                  bool truecolor = false);
 
     std::vector<IRImagePresentCmd> m_cmds;      // GT: appended by Submit() (kind == OPAQUE)
     std::vector<IRImagePresentCmd> m_rt_cmds;   // RT: stable copy after FlipBuffers()
@@ -137,6 +147,7 @@ private:
     GpuResourceHandle m_transparent_shader_handle = kInvalidGpuResource; // RAWIMAGE_TRANSPARENT_FRAGMENT_SHADER (overlay)
     GpuResourceHandle m_coverage_shader_handle    = kInvalidGpuResource; // RAWIMAGE_TRANSPARENT_COVERAGE_FRAGMENT_SHADER (overlay w/ coverage)
     GpuResourceHandle m_zoom_shader_handle        = kInvalidGpuResource; // RAWIMAGE_ZOOM_FRAGMENT_SHADER
+    GpuResourceHandle m_rgb_shader_handle         = kInvalidGpuResource; // RAWIMAGE_RGB_FRAGMENT_SHADER (RGB24 movie)
     GLint  m_loc_screen_size = -1;         // m_shader_handle / m_transparent_shader_handle
     GLint  m_loc_zoom_screen_size = -1;
     GLint  m_loc_zoom_center_map  = -1;
@@ -155,6 +166,10 @@ private:
     int    m_overlay_tex_gt_w = 0, m_overlay_tex_gt_h = 0;
     GpuResourceHandle m_coverage_tex_handle = kInvalidGpuResource;
     int    m_coverage_tex_gt_w = 0, m_coverage_tex_gt_h = 0;
+    // One true-colour texture for movie frames, kept apart from the R8 opaque
+    // slots so a slot never has to change format between a movie and a splash.
+    GpuResourceHandle m_video_tex_handle = kInvalidGpuResource;
+    int    m_video_tex_gt_w = 0, m_video_tex_gt_h = 0;
     GpuResourceHandle m_zoom_tex_handle = kInvalidGpuResource;
     int    m_zoom_tex_gt_w = 0, m_zoom_tex_gt_h = 0;
     bool   m_zoom_active_last_frame = false;          // GT
