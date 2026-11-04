@@ -402,18 +402,14 @@ int PlatformLinux::DisplayHasVariableRefresh(int w, int h, float refresh_hz)
     // One tuple per mode: ('3440x1440@143.923', 3440, 1440, 143.92..., 1.0, [scales], {props}).
     // Monitors without a variable mode never list 'refresh-rate-mode' at all.
     static const std::regex mode_re(R"(\('[^']*', (\d+), (\d+), ([0-9.]+), [0-9.]+, \[[^\]]*\], \{([^}]*)\}\))");
-    int current_modes = 0;
     int matched = -1;
-    int any_variable = 0;
     for (auto it = std::sregex_iterator(out.begin(), out.end(), mode_re); it != std::sregex_iterator(); ++it)
     {
         const std::smatch& m = *it;
         const std::string props = m[4].str();
         if (props.find("'is-current': <true>") == std::string::npos)
             continue;
-        current_modes++;
         const int variable = (props.find("'refresh-rate-mode': <'variable'>") != std::string::npos) ? 1 : 0;
-        any_variable |= variable;
         const int mw = atoi(m[1].str().c_str());
         const int mh = atoi(m[2].str().c_str());
         const float mhz = (float)atof(m[3].str().c_str());
@@ -425,10 +421,8 @@ int PlatformLinux::DisplayHasVariableRefresh(int w, int h, float refresh_hz)
             matched = variable;
         }
     }
-    if (matched >= 0)
-        return matched;
-    // A single monitor is the one the game is on, whatever SDL calls its size.
-    if (current_modes == 1)
-        return any_variable;
-    return -1;
+    // Only a monitor whose current mode is the game display's (size in pixels and rate)
+    // answers. A game shown inside a nested compositor (gamescope in a GNOME session)
+    // is not on the desktop's monitor at all, and its display matches none of them.
+    return matched;
 }
