@@ -4,6 +4,39 @@ This tracks the changes in *this* fork on top of the KeeperFX team's `master`.
 Version numbers follow the engine build (`<major>.<minor>.<release>.<build>`), with
 `alpha` appended on the alpha channel and nothing appended on the stable one.
 
+## 1.4.0.6078 — 2026-11-04 — stable
+
+**Replaces 1.4.0.6072.** The graphics card now draws the game, and every machine still starts it:
+
+- **OpenGL is the default renderer.** In busy parts of a map — fights, spells, lots of effects — the software
+  renderer needs more time per frame than a fast monitor gives it, so frames are held and the view judders even
+  though the game itself runs at full speed (the slowness reported on 1.4.0.6072). Measured with the camera
+  sweeping a copy of a Burdened Imps save, no frame cap, median frames per second:
+
+  | screen | software | OpenGL |
+  |---|---|---|
+  | 1920×1080 | 311 | 520 |
+  | 2560×1440 | 175 | 454 |
+  | 3440×1440 | 129 | 488 |
+  | 3840×2160 | 83 | 446 |
+
+  On OpenGL at most 0.6% of frames take longer than even a 360 Hz monitor allows; on software at 3440×1440, 58%
+  take longer than a 144 Hz one does.
+- **The software renderer takes over wherever OpenGL cannot start** — an old graphics card, a virtual machine,
+  a broken driver — and `keeperfx.log` says why. Before, choosing OpenGL on such a machine meant the game did
+  not start.
+- **Movies play in full colour on OpenGL.** It used to show them in 256 dithered colours (about 40 distinct
+  colours in a frame of the intro, against 32,000–115,000 now, the same as the software renderer). All five
+  shipped movies checked on both renderers.
+- **Launcher: existing installs switch once.** A `keeperfx.cfg` from before this release says
+  `RENDERER=SOFTWARE` because that was the shipped default, so the launcher moves it to OpenGL the first time it
+  sees this engine, and notes that it did. If you then choose Software again (Settings → Graphics → Renderer),
+  that choice is kept.
+
+Saves are unchanged (same format as 1.4.0.6072). Checked on this build, on OpenGL: every campaign's first level
+(35/35), save and load, the save menu, two-player multiplayer for three minutes without a resync, three
+resolution changes in game, and a copy of a player's save through a level's final fight.
+
 ## 1.4.0.6072 — 2026-11-03 — stable
 
 **Replaces 1.4.0.6062.** A security fix for downloaded maps, mods and campaigns, Workshop maps on the AUR
