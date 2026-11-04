@@ -95,7 +95,7 @@ build; this edition is the Linux half they don't ship, plus the bugs found on th
 - 🧰 **Launcher** — Workshop browser, Mod Manager, and a built-in updater with separate stable and alpha
   channels.
 
-459 commits on top of the team's `master`. **[Everything, item by item »](docs/whats-different.md)**
+467 commits on top of the team's `master`. **[Everything, item by item »](docs/whats-different.md)**
 
 ## Credit
 

@@ -4,6 +4,41 @@ This tracks the changes in *this* fork on top of the KeeperFX team's `master`.
 Version numbers follow the engine build (`<major>.<minor>.<release>.<build>`), with
 `alpha` appended on the alpha channel and nothing appended on the stable one.
 
+## 1.4.0.6087 — 2026-11-04 — alpha
+
+On top of stable 1.4.0.6078: frame pacing for any monitor, variable refresh, full sharpness on a scaled
+desktop, and a Lua texture fix.
+
+- **The frame cap follows any monitor and no longer halves the frame rate by mistake.**
+  `FRAMES_PER_SECOND=AUTO` draws one frame per refresh of the monitor the game is on. Its step-down
+  (144 → 72 when the machine cannot keep up) misjudged: it counted the time spent waiting for the monitor
+  as work, judged the slow frames right after a load, stepped down when only 10% of frames were late, and
+  could not climb back. 1.4.0.6072 halved 144 to 72 at the start of a camera sweep and stayed there; on
+  OpenGL, where a frame takes about 1 ms, a player's evening still dropped to 72 three times after loads.
+  Now a frame is judged by its own work, nothing right after a load or a pause counts, it steps down only
+  when at least half the frames are late for three seconds, and it tries the faster rate again after 30 s
+  (then 1, 2 and 4 minutes while that fails).
+- **Variable refresh (FreeSync, G-Sync, VESA Adaptive-Sync).** On such a monitor a late frame is shown as
+  soon as it is ready, so the cap never steps down and sits a little under the top rate to stay in the
+  variable range: 141 on 144 Hz, 157 on 160 Hz. `VARIABLE_REFRESH=AUTO` (the default) asks the desktop —
+  GNOME says — and `ON`/`OFF` decide it; the launcher's Graphics tab has the same choice. Measured on a copy
+  of a player's save at 160 Hz with variable refresh: 157 frames per second throughout, 0.65 ms a frame.
+- **Full sharpness on a scaled desktop.** With the desktop at 125% the game took 3440×1440 as 2752×1152 and
+  the desktop stretched the picture back up. It now draws at the monitor's real resolution (measured: 2752×1152
+  before, 3440×1440 now, a third more edge detail), windowed modes are the stated number of pixels, and the
+  mouse moves exactly as before.
+- **Lua: `Map.default_texture`.** A texture a level's script set read back one off and turned into the next
+  texture after a saved game was loaded. The team fixed the reading half (their #5583, taken here with its
+  author); this fixes the half that stores it. Measured: set "WINTER", save, load — still winter (on 1.4.0.6078
+  the reloaded terrain changed).
+- **Launcher:** the Variable refresh choice on the Graphics tab; the refresh rate it writes as the frame cap's
+  fallback no longer stops at 200 Hz (a 240 or 360 Hz monitor is not capped by it).
+
+Saves are unchanged (same format as 1.4.0.6078). Checked on this build, on OpenGL: every campaign's first level
+(35/35, the same engine messages as the stable), save and load, the save menu, two-player multiplayer for three
+minutes without a resync, resolution changes in game, and copies of a player's saves through a level's final
+fight and on the next level.
+
 ## 1.4.0.6078 — 2026-11-04 — stable
 
 **Replaces 1.4.0.6072.** The graphics card now draws the game, and every machine still starts it:
