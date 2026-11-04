@@ -536,6 +536,29 @@ void WindowSystemSDL::HandleWindowEvent(const SDL_Event* ev)
     }
 }
 
+int WindowSystemSDL::GetDisplayVariableRefresh()
+{
+    if (m_window == nullptr)
+        return -1;
+    SDL_DisplayID disp_id = SDL_GetDisplayForWindow(m_window);
+    const SDL_DisplayMode* mode = (disp_id != 0) ? SDL_GetCurrentDisplayMode(disp_id) : nullptr;
+    if (mode == nullptr || mode->refresh_rate <= 0.0f)
+        return -1;
+    // The desktop lists modes in pixels; SDL's w/h are in points on a scaled display.
+    const float density = (mode->pixel_density > 0.0f) ? mode->pixel_density : 1.0f;
+    const int w = (int)(mode->w * density + 0.5f);
+    const int h = (int)(mode->h * density + 0.5f);
+    if (m_vrr_cached && m_vrr_display == disp_id && m_vrr_w == w && m_vrr_h == h && m_vrr_hz == mode->refresh_rate)
+        return m_vrr_answer;
+    m_vrr_answer = GetPlatform()->DisplayHasVariableRefresh(w, h, mode->refresh_rate);
+    m_vrr_display = disp_id;
+    m_vrr_w = w;
+    m_vrr_h = h;
+    m_vrr_hz = mode->refresh_rate;
+    m_vrr_cached = true;
+    return m_vrr_answer;
+}
+
 int WindowSystemSDL::GetDisplayRefreshRate() const
 {
     if (m_window == nullptr)

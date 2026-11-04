@@ -232,6 +232,18 @@ extern "C" int PlatformManager_GetDisplayRefreshRate(void)
     return ws ? ws->GetDisplayRefreshRate() : 0;
 }
 
+extern "C" int PlatformManager_GetDisplayVariableRefresh(void)
+{
+    IWindowSystem* ws = GetSDLWindowSystem();
+    return ws ? ws->GetDisplayVariableRefresh() : -1;
+}
+
+extern "C" void PlatformManager_ForgetDisplayVariableRefresh(void)
+{
+    IWindowSystem* ws = GetSDLWindowSystem();
+    if (ws) ws->ForgetDisplayVariableRefresh();
+}
+
 extern "C" int PlatformManager_TrashFile(const char* abs_path)
 {
     return GetPlatform()->TrashFile(abs_path) ? 1 : 0;

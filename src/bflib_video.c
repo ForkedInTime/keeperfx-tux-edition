@@ -83,6 +83,9 @@ unsigned short display_id = 0;
  */
 TbBool vsync_enabled = 1;
 
+/** Variable refresh rate (VARIABLE_REFRESH in keeperfx.cfg); see VariableRefreshSetting. */
+int variable_refresh_setting = VRR_AUTO;
+
 /** Requested renderer backen; set from keeperfx.cfg (RENDERER) */
 int requested_renderer_type = RENDERER_OPENGL;
 

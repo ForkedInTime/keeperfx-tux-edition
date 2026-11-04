@@ -52,6 +52,11 @@ public:
         return true;
     }
 
+    // How long the last PresentFrame() spent waiting -- on the display (vsync)
+    // or on the previous frame still being drawn -- rather than working. The
+    // adaptive frame cap judges a frame by its own work, not by the display's pace.
+    virtual float LastPresentWaitMs() const { return 0.0f; }
+
     // Present a raw indexed8 image (FMV frame, splash bitmap) at a
     // destination rect. Returns false if the image couldn't be drawn.
     virtual bool PresentImage(const struct RendererPresentImageDesc* desc) = 0;

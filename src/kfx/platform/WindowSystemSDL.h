@@ -50,6 +50,8 @@ public:
 
     // ----- Display info -----
     int GetDisplayRefreshRate() const override;
+    int GetDisplayVariableRefresh() override;
+    void ForgetDisplayVariableRefresh() override { m_vrr_cached = false; }
 
     // PollInput is a no-op: SDL delivers mouse input via events.
 
@@ -63,6 +65,13 @@ private:
     void GetPixelsPerWindowUnit(float* out_sx, float* out_sy) const;
 
     SDL_Window* m_window = nullptr;
+    // GetDisplayVariableRefresh() asks the desktop, which takes a few ms, so the
+    // answer is kept until the window's display or that display's mode changes.
+    unsigned int m_vrr_display = 0;
+    int   m_vrr_w = 0, m_vrr_h = 0;
+    float m_vrr_hz = 0.0f;
+    int   m_vrr_answer = -1;
+    bool  m_vrr_cached = false;
     bool m_appActive = true;
     bool m_useRelativeMouse = true;
     bool m_keepComposited = false;

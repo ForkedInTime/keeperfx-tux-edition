@@ -537,8 +537,12 @@ void gameplay_loop_draw()
     if ( do_draw ) {
         // Feed the drawn frame's cost to the adaptive cap. Only frames that were
         // actually drawn say anything about whether this machine can sustain the
-        // rate; skipped ones would otherwise look like free headroom.
-        fps_adaptive_sample(frametime_measurements.frametime_current[Frametime_Draw]);
+        // rate; skipped ones would otherwise look like free headroom. Time spent
+        // waiting on the display is its pace, not this frame's cost.
+        float frame_cost_ms = frametime_measurements.frametime_current[Frametime_Draw] - RendererLastPresentWaitMs();
+        if (frame_cost_ms < 0.0f)
+            frame_cost_ms = 0.0f;
+        fps_adaptive_sample(frame_cost_ms);
     }
 
     if ( do_draw ) {

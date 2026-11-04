@@ -735,7 +735,11 @@ void RendererOpenGL::PresentFrame()
 
     RenderTaskProducerRegistry_ProduceAll(RendererFrameCounter_Current());
 
+    // The render thread swaps buffers, and with vsync on its swap blocks until
+    // the display takes the frame; waiting for it here is the display's pace.
+    const Uint64 wait_start = SDL_GetTicksNS();
     m_impl->thread_mgr.WaitForCompletion();
+    m_present_wait_ms = (float)(SDL_GetTicksNS() - wait_start) / 1000000.0f;
 
     if (RendererIsFadeCachePreserved() && !RendererConsumeForceUIFlip())
     {

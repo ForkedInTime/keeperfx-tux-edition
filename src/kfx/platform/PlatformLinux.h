@@ -27,6 +27,8 @@ public:
     bool VideoInit() override;
 
     TbBool TrashFile(const char* abs_path) override;
+
+    int DisplayHasVariableRefresh(int w, int h, float refresh_hz) override;
 };
 
 #endif // PLATFORM_LINUX_H

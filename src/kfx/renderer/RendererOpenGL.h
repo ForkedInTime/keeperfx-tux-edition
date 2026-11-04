@@ -19,6 +19,7 @@ public:
     void SetDisplayPalette(const unsigned char* rgb8) override;
     void ClearScreen(unsigned char colour) override;
     void PresentFrame() override;
+    float LastPresentWaitMs() const override { return m_present_wait_ms; }
 
     BackendCapabilities GetCapabilities() const override { return BackendCapabilities{ 1 }; }
     bool CanDraw() const override
@@ -73,6 +74,7 @@ public:
     void FGCaptureScreenshot() override;
 
 private:
+    float m_present_wait_ms = 0.0f; // time the last PresentFrame() waited for the render thread
     struct Impl;
     Impl* m_impl = nullptr;
 

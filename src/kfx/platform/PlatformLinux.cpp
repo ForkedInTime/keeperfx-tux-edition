@@ -14,6 +14,7 @@
 #include <cerrno>
 #include <algorithm>
 #include <memory>
+#include <regex>
 #include <string>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -366,4 +367,68 @@ void PlatformLinux::ShutdownSteam() {}
 extern "C" int main(int argc, char *argv[])
 {
     return kfxmain(argc, argv);
+}
+
+/******************************************************************************/
+// Variable refresh rate. SDL reports a mode's refresh rate but not whether the
+// monitor is running it fixed or variable, and the frame-rate cap needs to know:
+// on a fixed-refresh monitor a frame that misses a refresh is held for a whole
+// extra one, on a variable-refresh monitor it is shown as soon as it is ready.
+//
+// GNOME (Mutter) says so in DisplayConfig.GetCurrentState: the current mode of a
+// monitor carries 'refresh-rate-mode': <'variable'> when variable refresh is on.
+// gdbus ships with GLib on every GNOME desktop; asking it once per display change
+// costs a few milliseconds and saves linking a D-Bus library for one read-only
+// call. Any failure (another desktop, no gdbus, a sandbox without access to the
+// session bus) is "unknown", and the caller treats unknown as fixed refresh --
+// the behaviour every earlier build had.
+int PlatformLinux::DisplayHasVariableRefresh(int w, int h, float refresh_hz)
+{
+    // The game's own LD_LIBRARY_PATH (an AppImage's bundled libraries) must not
+    // reach a system binary.
+    FILE* pipe = popen("env -u LD_LIBRARY_PATH -u LD_PRELOAD gdbus call --session --timeout 2"
+                       " --dest org.gnome.Mutter.DisplayConfig --object-path /org/gnome/Mutter/DisplayConfig"
+                       " --method org.gnome.Mutter.DisplayConfig.GetCurrentState 2>/dev/null", "r");
+    if (pipe == nullptr)
+        return -1;
+    std::string out;
+    char buf[4096];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), pipe)) > 0 && out.size() < (1u << 20))
+        out.append(buf, n);
+    pclose(pipe);
+    if (out.empty())
+        return -1;
+    // One tuple per mode: ('3440x1440@143.923', 3440, 1440, 143.92..., 1.0, [scales], {props}).
+    // Monitors without a variable mode never list 'refresh-rate-mode' at all.
+    static const std::regex mode_re(R"(\('[^']*', (\d+), (\d+), ([0-9.]+), [0-9.]+, \[[^\]]*\], \{([^}]*)\}\))");
+    int current_modes = 0;
+    int matched = -1;
+    int any_variable = 0;
+    for (auto it = std::sregex_iterator(out.begin(), out.end(), mode_re); it != std::sregex_iterator(); ++it)
+    {
+        const std::smatch& m = *it;
+        const std::string props = m[4].str();
+        if (props.find("'is-current': <true>") == std::string::npos)
+            continue;
+        current_modes++;
+        const int variable = (props.find("'refresh-rate-mode': <'variable'>") != std::string::npos) ? 1 : 0;
+        any_variable |= variable;
+        const int mw = atoi(m[1].str().c_str());
+        const int mh = atoi(m[2].str().c_str());
+        const float mhz = (float)atof(m[3].str().c_str());
+        if (mw == w && mh == h && mhz > refresh_hz - 0.5f && mhz < refresh_hz + 0.5f)
+        {
+            // Two identical monitors that disagree cannot be told apart from here.
+            if (matched >= 0 && matched != variable)
+                return -1;
+            matched = variable;
+        }
+    }
+    if (matched >= 0)
+        return matched;
+    // A single monitor is the one the game is on, whatever SDL calls its size.
+    if (current_modes == 1)
+        return any_variable;
+    return -1;
 }

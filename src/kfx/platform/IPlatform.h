@@ -68,6 +68,12 @@ public:
     /** Log display and HDR details for the game window. */
     virtual void LogDisplayDiagnostics(SDL_Window* /*window*/) {}
 
+    /** Whether the monitor showing a w x h (pixels) mode at `refresh_hz` is
+     *  driven with a variable refresh rate right now (FreeSync, G-Sync,
+     *  VESA Adaptive-Sync): 1 yes, 0 no, -1 unknown. SDL has no way to ask, so
+     *  this is the desktop's own answer where the platform can get one. */
+    virtual int DisplayHasVariableRefresh(int /*w*/, int /*h*/, float /*refresh_hz*/) { return -1; }
+
     /** Move `abs_path` into the OS's native trash/recycle bin, in a way the desktop
      *  shell can restore it (freedesktop Trash spec on Linux; the platform's own
      *  equivalent elsewhere). Returns false -- "not trashed" -- when the OS trash is

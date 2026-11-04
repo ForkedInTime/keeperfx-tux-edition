@@ -70,6 +70,10 @@ void RendererClearScreen(unsigned char colour);
 // Present the drawn frame to the window (blit draw surface + flip).
 void RendererPresentFrame(void);
 
+// Time the last RendererPresentFrame() spent waiting on the display (vsync) or
+// on the previous frame, in milliseconds -- not part of this frame's cost.
+float RendererLastPresentWaitMs(void);
+
 TbBool RendererBeginFrame(void);
 void   RendererEndFrame(void);
 

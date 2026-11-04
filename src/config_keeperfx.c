@@ -192,6 +192,9 @@ const struct NamedCommand conf_commands[] = {
   {"REPLAY_MAX_SIZE"               , 54},
   {"CHAT_FONT_SIZE"                , 55},
   {"REPLAY_REWIND_BUFFER_SIZE"     , 56},
+  // Fork-only keys sit well above upstream's numbering, so a key upstream adds
+  // next can never take the same number in a merge.
+  {"VARIABLE_REFRESH"              , 101},
   {NULL,                   0},
   };
 
@@ -200,6 +203,13 @@ const struct NamedCommand conf_commands[] = {
   {"FULL",           VpMode_Full},
   {"FULL_LETTERBOX", VpMode_FullLetterbox},
   {NULL,             0},
+  };
+
+  const struct NamedCommand variable_refresh_desc[] = {
+  {"AUTO",         VRR_AUTO},
+  {"ON",           VRR_ON},
+  {"OFF",          VRR_OFF},
+  {NULL,           0},
   };
 
   const struct NamedCommand renderer_type_desc[] = {
@@ -1108,6 +1118,16 @@ static void load_file_configuration(const char *fname, const char *sname, const 
           } else {
             CONFWRNLOG("Invalid MULTIPLAYER_PORT '%s' in %s file.", COMMAND_TEXT(cmd_num), config_textname);
           }
+          break;
+      case 101: // VARIABLE_REFRESH
+          i = recognize_conf_parameter(buf,&pos,len,variable_refresh_desc);
+          if (i <= 0)
+          {
+              CONFWRNLOG("Couldn't recognize \"%s\" command parameter in %s file.",
+                COMMAND_TEXT(cmd_num),config_textname);
+            break;
+          }
+          variable_refresh_setting = i;
           break;
       case 49: // RENDERER
           i = recognize_conf_parameter(buf,&pos,len,renderer_type_desc);
