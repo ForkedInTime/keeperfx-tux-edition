@@ -33,7 +33,7 @@ Wine, and the Linux-specific fixes, hardening and performance work below.
 > | 🎮 | **Gameplay bugs found in players' games** — workers quitting a room they cross or step off, endless scavenger re-enrolment, imps and the computer repeating trips that cannot succeed, trap-crate and hatchery counts, rebirth, doors, explosions, abyss kills, the Call to Arms charge bar, script commands that missed the creatures already on the map, replays that fell a turn behind after a save, creatures choosing steps from leftover memory, and saves on levels that bring their own config files | ~30 fixes |
 > | 💥 | **Crash fixes** — ultrawide creature-possession, UTF-8 fonts, campaign scripts, clean exit, case-sensitive audio, the startup error dialog without libXrandr, Lua errors that closed the game, the creature-list corruption **root-fixed** | ~10 fixes |
 > | ⚡ | **Performance** — frame pacing matched to your monitor, cached parchment map view, per-turn CPU busy-spin, sprite/text blit, GUI hot paths, cached instant-load Workshop | 8 wins |
-> | 🎨 | **Graphics & audio** — upstream's OpenGL renderer built into the Linux binary (opt-in), front-end movies in any codec, your own music in any filenames and any of OGG/FLAC/WAV/MP3, a real window icon and desktop identity on X11 *and* Wayland, artwork (and the game's text) regenerated from upstream's sources on every build | 5 items |
+> | 🎨 | **Graphics & audio** — upstream's OpenGL renderer built into the Linux binary and made the default (software when OpenGL cannot start), front-end movies in any codec, your own music in any filenames and any of OGG/FLAC/WAV/MP3, a real window icon and desktop identity on X11 *and* Wayland, artwork (and the game's text) regenerated from upstream's sources on every build | 5 items |
 > | 🌐 | **Multiplayer map packs** — the Classic, Modern and Original mappacks now load in every install method | 1 fix |
 > | 🧰 | **Launcher & tooling** — in-launcher Workshop browser + Installed manager, Mod Manager, Play ▾ menu, built-in updater with **separate stable and alpha channels**, side-by-side log viewer, the last five game logs kept, music download + recovery, single-instance lock, weekly sync bot, a weekly Arch library watch | 12+ items |
 >
@@ -44,19 +44,26 @@ Wine, and the Linux-specific fixes, hardening and performance work below.
 ## Every change, area by area
 
 **Display & media**
-- **Upstream's OpenGL renderer, in a Linux build you can download (opt-in).** In September 2026 upstream
-  added an experimental OpenGL backend — world, UI, sprites, shadows and lens effects drawn by the GPU.
-  Their CMake build compiles it everywhere, but the only build they release is for Windows. This fork
-  compiles it into the Linux binary: set `RENDERER=OPENGL` in `keeperfx.cfg` to try it. Upstream's
-  shipped config now selects `OPENGL`; here `SOFTWARE` stays the default and is what every install runs
-  until you opt in. It replaces the fork's own GPU present layer from June (8-bit frame uploaded,
-  palette applied in a shader), which had no place in upstream's new renderer architecture; the software path now presents
-  through SDL exactly as upstream's does.
+- **Upstream's OpenGL renderer, in a Linux build you can download — and the default.** In September 2026
+  upstream added an OpenGL backend — world, UI, sprites, shadows and lens effects drawn by the GPU. Their
+  CMake build compiles it everywhere, but the only build they release is for Windows. This fork compiles it
+  into the Linux binary, and since November 2026 it is the default (`RENDERER=OPENGL`): at 3440×1440 the
+  software renderer took 5–8.5 ms a frame in busy parts of the map, more than a 144 Hz refresh allows, where
+  OpenGL took about 1 ms. A machine where OpenGL cannot start still runs the game: with no OpenGL window at
+  all, or no OpenGL 3.3, the software renderer takes over in the same window and `keeperfx.log` says why.
+  (Two things stood in the way of that fallback: an OpenGL window starts hidden, so the game ran invisible,
+  and the OpenGL context requests stayed set in SDL, so SDL's own output for the software renderer could not
+  start either.) The launcher moves a config that still has the old shipped `SOFTWARE` default to `OPENGL`
+  once; a choice made after that is kept. It replaces the fork's own GPU present layer from June (8-bit
+  frame uploaded, palette applied in a shader), which had no place in upstream's new renderer architecture;
+  the software path presents through SDL exactly as upstream's does.
 - **Front-end movies in any codec, in full colour.** The intro, logo stings and outro are not limited
-  to 8-bit Smacker: anything ffmpeg decodes plays, and with the default software renderer it plays in
-  full colour, scaled smoothly to the screen. Upstream's present API takes 8-bit images only, so the
+  to 8-bit Smacker: anything ffmpeg decodes plays, in full colour on either renderer, scaled smoothly to
+  the screen. Upstream's present API takes 8-bit images only, so the
   fork adds a full-colour format to it (between 1.4.0.5698 and 1.4.0.6010 the alphas played movies in
-  216 dithered colours for want of it). The opt-in OpenGL renderer still plays them in 256 colours. Plus
+  216 dithered colours for want of it). The OpenGL renderer plays them in full colour as well, through a
+  texture and shader of its own (it used to fall back to 256 colours: about 40 distinct colours in a frame of
+  the intro, against 32,000–115,000 now). Plus
   a no-AI "vintage cleanup" of all five movies that keeps the original 80s-CG character while removing
   blocking/banding on a big screen.
 - **Your own music — any filenames, any format.** Upstream (since August 2026) plays the files in `music/`
@@ -307,7 +314,7 @@ first.)
 
 ## 🚧 Work in progress
 
-- **GPU world renderer.** Upstream's OpenGL backend (the opt-in above) is now the vehicle for this; the
+- **GPU world renderer.** Upstream's OpenGL backend (the default above) is now the vehicle for this; the
   earlier design docs and frozen prototype under [`docs/vulkan-foundation/`](vulkan-foundation) stay
-  as history. The work here is making that backend a first-class Linux path: measuring it against the
-  software renderer, then fixing what is Linux-specific. **It is not the default in any current build.**
+  as history. What is left is upstream's own list of cosmetic differences from the software renderer
+  (outlines, some minimap colours), fixed here as they are measured.

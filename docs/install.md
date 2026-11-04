@@ -141,8 +141,10 @@ Keeper* files.
 - ⚠️ **Will NOT run on Ubuntu 22.04 or older.** Official builds are compiled on Ubuntu 24.04, whose C
   library (glibc 2.39) is newer than what 22.04 and earlier provide — the binaries simply won't start on
   them. Older systems must [build from source](development.md#build-from-source) instead.
-- An OpenGL 3.3-capable GPU **only if you opt into `RENDERER=OPENGL`**. The default software renderer
-  presents through SDL and needs nothing in particular.
+- An OpenGL 3.3-capable GPU for the default renderer (`RENDERER=OPENGL`): any graphics card or integrated
+  GPU from the last decade. Where OpenGL cannot start (an old GPU, a VM, a broken driver), the game switches
+  to the software renderer on its own, says so in `keeperfx.log`, and runs; `RENDERER=SOFTWARE` skips the
+  attempt.
 - The system's own graphics (OpenGL, X11), sound (ALSA) and font (fontconfig, fribidi) libraries. Every
   desktop install has them; the AppImage leaves these to the host on purpose, so a bare container or a
   server image will not do.
