@@ -334,7 +334,8 @@ static TbBool LbHwCheckIsModeAvailable(TbScreenMode mode, unsigned short display
     else if (mdinfo->VideoFlags & Lb_VF_DESKTOP)
     {
         // We actually need to setup this mode now, as it is flexible to the user's setup
-        // Get current desktop display width and height (after DPI scaling)
+        // Get current desktop display width and height, in the monitor's pixels (not the
+        // desktop's scaled units: the game draws 1:1 whatever the desktop scale)
         int desktop_w = 0, desktop_h = 0;
         if (PlatformManager_GetDesktopDisplayMode((int)display_sdlid, &desktop_w, &desktop_h) != 0)
         {

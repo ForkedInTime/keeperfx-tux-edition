@@ -22,6 +22,8 @@ public:
     void RecenterCursor() override;
     bool GetCursorPosition(int* out_x, int* out_y) const override;
     void GetCursorScale(float* out_sx, float* out_sy) const override;
+    /** Drawable pixels per window unit: 1.25 on a desktop scaled to 125%, else 1. */
+    void GetPixelsPerWindowUnit(float* out_sx, float* out_sy) const;
     bool IsCursorInWindow() const override;
 
     bool HasWindow() const override;
@@ -62,7 +64,6 @@ private:
     void ApplyOsCursorPolicy();
     void KeepFullscreenComposited();
     void GetVisibleArea(int* out_x, int* out_y, int* out_w, int* out_h) const;
-    void GetPixelsPerWindowUnit(float* out_sx, float* out_sy) const;
 
     SDL_Window* m_window = nullptr;
     // GetDisplayVariableRefresh() asks the desktop, which takes a few ms, so the

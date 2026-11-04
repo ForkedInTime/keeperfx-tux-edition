@@ -340,8 +340,14 @@ static void process_event(const SDL_Event *ev)
                 s_recenter_pending = false;
                 break;
             }
-            int dx = ev->motion.xrel * lbDisplay.MouseMoveRatio + frac_x;
-            int dy = ev->motion.yrel * lbDisplay.MouseMoveRatio + frac_y;
+            // SDL reports the motion in the desktop's units, the game moves its cursor in
+            // its own pixels: on a scaled desktop (125%) the game has 1.25 pixels per unit,
+            // so without this the cursor would cross the screen a fifth slower than the
+            // desktop's pointer does. 1.0 on an unscaled desktop.
+            float ux = 1.0f, uy = 1.0f;
+            GetSDLWindowSystem()->GetPixelsPerWindowUnit(&ux, &uy);
+            int dx = (int)(ev->motion.xrel * ux * lbDisplay.MouseMoveRatio) + frac_x;
+            int dy = (int)(ev->motion.yrel * uy * lbDisplay.MouseMoveRatio) + frac_y;
 
             mouseDelta.x = (dx + 128) >> 8;
             mouseDelta.y = (dy + 128) >> 8;
