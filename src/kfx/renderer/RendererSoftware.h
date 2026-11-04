@@ -21,6 +21,7 @@ public:
     void SetDisplayPalette(const unsigned char* pal6) override;
     void ClearScreen(unsigned char colour) override;
     void PresentFrame() override;
+    float LastPresentWaitMs() const override { return m_present_wait_ms; }
     BackendCapabilities GetCapabilities() const override { return BackendCapabilities{ 0 }; }
     bool BeginFrame() override;
     void EndFrame() override;
@@ -57,6 +58,7 @@ private:
     int           m_tex_w    = 0;
     int           m_tex_h    = 0;
     int           m_vsync    = -1; // SDL_SetRenderVSync value; -1 = unset
+    float         m_present_wait_ms = 0.0f; // time in the last SDL_RenderPresent()
 
     // A true-colour movie frame bypasses the 8-bit draw surface: it is uploaded
     // here and drawn by the next PresentFrame() in place of that surface,

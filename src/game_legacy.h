@@ -411,7 +411,7 @@ extern int32_t fps_limit_current;
 extern int32_t fps_limit_main;
 
 /* Adaptive draw-rate cap; see main.cpp. Only active when FRAMES_PER_SECOND=AUTO. */
-void fps_adaptive_begin(int32_t detected_refresh);
+void fps_adaptive_begin(int32_t detected_refresh, TbBool variable_refresh, const char* how);
 void fps_adaptive_stop(void);
 void fps_adaptive_sample(float frame_ms);
 extern int32_t fps_limit_secondary;

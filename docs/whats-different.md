@@ -44,6 +44,12 @@ Wine, and the Linux-specific fixes, hardening and performance work below.
 ## Every change, area by area
 
 **Display & media**
+- **The game draws at your monitor's pixels whatever the desktop scale.** With the desktop scaled — 125% is
+  common on large or sharp monitors — the game used to take the desktop's scaled size as its resolution
+  (3440×1440 read as 2752×1152) and the desktop stretched the picture back up, a fifth of the sharpness gone
+  for a setting that is about the desktop's text. It now draws at the monitor's real resolution (measured on a
+  125% desktop: 2752×1152 before, 3440×1440 now), a windowed mode is the stated number of pixels, and the mouse
+  crosses the screen at the same speed as before.
 - **Upstream's OpenGL renderer, in a Linux build you can download — and the default.** In September 2026
   upstream added an OpenGL backend — world, UI, sprites, shadows and lens effects drawn by the GPU. Their
   CMake build compiles it everywhere, but the only build they release is for Windows. This fork compiles it
@@ -165,15 +171,25 @@ Wine, and the Linux-specific fixes, hardening and performance work below.
   readability.
 
 **Linux performance** *(engine-level optimizations specific to this native build — upstream is Windows-first and does not tune the GCC/Linux path, so these are ours)*
-- **Frame pacing matched to your monitor.** The shipped default draws as fast as the processor allows —
-  frames your display never shows, one core pinned at 100%, and, because the game runs on a single thread,
-  nothing held in reserve for a frame that needs extra work. Such a frame overruns and is dropped: an
-  intermittent stutter with no single cause. New installs now cap drawing at the refresh rate the display
-  reports, and when the machine can't hold that rate the cap steps down to a whole fraction of it
-  (144 → 72 → 48) so a frame that would have been dropped arrives on time instead. It has hysteresis in
-  both directions, so it settles rather than hunts. A rate you set yourself is an instruction and is never
-  overridden, and the simulation is untouched — multiplayer and replays advance at their own pace no matter
-  how often the screen is drawn.
+- **Frame pacing matched to your monitor, whatever its refresh rate.** The shipped default draws as fast as
+  the processor allows — frames your display never shows, one core pinned at 100%, and, because the game runs
+  on a single thread, nothing held in reserve for a frame that needs extra work. `FRAMES_PER_SECOND=AUTO`
+  instead draws one frame per refresh of the monitor the game is on — 60, 144, 240, 360 Hz — read again when
+  the window moves to another monitor. On a fixed-refresh monitor with vsync, a frame that misses its refresh
+  is held for a whole extra one; only when most frames are late (half or more, three seconds running) does
+  the cap step down to a whole fraction of the rate (144 → 72 → 48) to even them out, because that gives up
+  every frame that was on time. It judges a frame by its own work — not the time spent waiting for the
+  display, not the first seconds after a load — and tries the faster rate again after 30 s (then 1, 2, 4 min
+  while that fails), since at the lower rate the processor slows its clock and every frame looks slower than
+  it would at full speed. The first version stepped down at 10% late frames, counted the wait for the display
+  as work, and could not climb back: 1.4.0.6072 halved 144 to 72 at the start of a camera sweep and stayed
+  there, and on OpenGL, where a frame takes about 1 ms, it still dropped to 72 three times after loads in a
+  player's evening. **Variable refresh** (FreeSync, G-Sync, VESA Adaptive-Sync) shows a late frame as soon as
+  it is ready, so there is nothing to even out: with it, the cap never steps down and sits a little under the
+  monitor's top rate (141 on 144 Hz, 157 on 160 Hz) to stay in the variable range. `VARIABLE_REFRESH=AUTO`
+  asks the desktop (GNOME says so); elsewhere set `ON` in `keeperfx.cfg` or in the launcher's Graphics tab. A
+  rate you set yourself is an instruction and is never overridden, and the simulation is untouched —
+  multiplayer and replays advance at their own pace no matter how often the screen is drawn.
 - **The map view no longer costs a processor core.** With the map open, 46% of all CPU time went on
   stretching the parchment background to fill the screen — about five million pixels at 3440×1440, every
   frame, on the one thread the game loop runs on — only to discard it and start over. The image is static.
@@ -210,7 +226,8 @@ first.)
 - **Map scripts:** `SET_CREATURE_CONFIGURATION` missed the creatures already on the map and zeroed values
   left out; `MOVE_CREATURE` for `ALL_PLAYERS` spawned a stray effect; removing a sacrifice recipe from a
   full table doubled the last one; Lua lost `os.date` (Pandaemonium's second level stopped setting
-  itself up); `DESCRIPTION_GEO` boxes with a 0 or missing value were drawn at random places; an
+  itself up); a texture a level's Lua set with `Map.default_texture` read back one off and turned into the next
+  texture after a saved game was loaded (the team fixed the reading half in their #5583); `DESCRIPTION_GEO` boxes with a 0 or missing value were drawn at random places; an
   objective at a destroyed heart had no location; `SET_POWER_CONFIGURATION` set 0 for five of its
   fields, a power's top overcharge level charged its duration as the price, a matching `BLOCKED_PICKUP`
   hand rule blocked instead of lifting the block, and party range checks could never be true.

@@ -362,8 +362,13 @@ int WindowSystemSDL::GetDesktopDisplayMode(int display, int* out_w, int* out_h) 
     const SDL_DisplayMode* mode = SDL_GetDesktopDisplayMode(disp_id);
     if (!mode)
         return -1;
-    if (out_w) *out_w = mode->w;
-    if (out_h) *out_h = mode->h;
+    // In pixels, not in the desktop's scaled units: with the desktop at 125% SDL
+    // reports 3440x1440 as 2752x1152 points, and a game drawn at that size is
+    // stretched back up by the compositor and loses a fifth of its sharpness.
+    // The game draws at the monitor's own resolution whatever the desktop scale.
+    const float density = (mode->pixel_density > 0.0f) ? mode->pixel_density : 1.0f;
+    if (out_w) *out_w = (int)(mode->w * density + 0.5f);
+    if (out_h) *out_h = (int)(mode->h * density + 0.5f);
     return 0;
 }
 
@@ -414,10 +419,35 @@ int WindowSystemSDL::SetWindowDisplayMode(int w, int h)
     return SDL_SetWindowFullscreenMode(m_window, nullptr) ? 0 : -1;
 }
 
+// The game sizes its window in pixels; SDL sizes it in the desktop's units. On a
+// scaled desktop (125%: 1.25 pixels per unit) a 1920x1080 window must be asked for
+// as 1536x864 units to be 1920x1080 pixels, drawn 1:1. 1.0 everywhere else.
+static float pixels_per_window_unit(SDL_Window* window)
+{
+    float density = 0.0f;
+    if (window != nullptr)
+        density = SDL_GetWindowPixelDensity(window);
+    if (density <= 0.0f)
+    {
+        const SDL_DisplayMode* mode = SDL_GetDesktopDisplayMode(
+            window ? SDL_GetDisplayForWindow(window) : SDL_GetPrimaryDisplay());
+        density = (mode != nullptr && mode->pixel_density > 0.0f) ? mode->pixel_density : 1.0f;
+    }
+    return density;
+}
+
+static int pixels_to_window_units(int px, float density)
+{
+    return (density > 1.0f) ? (int)(px / density + 0.5f) : px;
+}
+
 void WindowSystemSDL::SetWindowSize(int w, int h)
 {
     if (m_window != nullptr)
-        SDL_SetWindowSize(m_window, w, h);
+    {
+        const float density = pixels_per_window_unit(m_window);
+        SDL_SetWindowSize(m_window, pixels_to_window_units(w, density), pixels_to_window_units(h, density));
+    }
 }
 
 int WindowSystemSDL::SetWindowFullscreen(unsigned int flags)
@@ -463,6 +493,9 @@ bool WindowSystemSDL::CreateWindow(const char* title, int x, int y, int w, int h
         sdl3_flags |= SDL_WINDOW_FULLSCREEN;
     if (flags & KFX_WF_BORDERLESS) sdl3_flags |= SDL_WINDOW_BORDERLESS;
     if (flags & KFX_WF_HIDDEN)     sdl3_flags |= SDL_WINDOW_HIDDEN;
+    // Draw at the monitor's pixels on a scaled desktop rather than at the desktop's
+    // units stretched by the compositor (no effect where there is no scaling).
+    sdl3_flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
 
     if (flags & KFX_WF_OPENGL)
     {
@@ -478,7 +511,8 @@ bool WindowSystemSDL::CreateWindow(const char* title, int x, int y, int w, int h
         GLContextSDL::RequestWindowAttributes();
     }
 
-    m_window = SDL_CreateWindow(title, w, h, sdl3_flags);
+    const float density = pixels_per_window_unit(nullptr);
+    m_window = SDL_CreateWindow(title, pixels_to_window_units(w, density), pixels_to_window_units(h, density), sdl3_flags);
     if (!m_window)
         return false;
     m_keepComposited = (flags & KFX_WF_KEEP_COMPOSITED) != 0;
@@ -534,6 +568,29 @@ void WindowSystemSDL::HandleWindowEvent(const SDL_Event* ev)
     default:
         break;
     }
+}
+
+int WindowSystemSDL::GetDisplayVariableRefresh()
+{
+    if (m_window == nullptr)
+        return -1;
+    SDL_DisplayID disp_id = SDL_GetDisplayForWindow(m_window);
+    const SDL_DisplayMode* mode = (disp_id != 0) ? SDL_GetCurrentDisplayMode(disp_id) : nullptr;
+    if (mode == nullptr || mode->refresh_rate <= 0.0f)
+        return -1;
+    // The desktop lists modes in pixels; SDL's w/h are in points on a scaled display.
+    const float density = (mode->pixel_density > 0.0f) ? mode->pixel_density : 1.0f;
+    const int w = (int)(mode->w * density + 0.5f);
+    const int h = (int)(mode->h * density + 0.5f);
+    if (m_vrr_cached && m_vrr_display == disp_id && m_vrr_w == w && m_vrr_h == h && m_vrr_hz == mode->refresh_rate)
+        return m_vrr_answer;
+    m_vrr_answer = GetPlatform()->DisplayHasVariableRefresh(w, h, mode->refresh_rate);
+    m_vrr_display = disp_id;
+    m_vrr_w = w;
+    m_vrr_h = h;
+    m_vrr_hz = mode->refresh_rate;
+    m_vrr_cached = true;
+    return m_vrr_answer;
 }
 
 int WindowSystemSDL::GetDisplayRefreshRate() const

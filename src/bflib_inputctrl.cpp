@@ -28,6 +28,7 @@
 #include "bflib_joyst.h"
 #include "bflib_video.h"
 #include "kfx/platform/WindowSystemSDL.h"
+#include "kfx/platform/PlatformManager.h" // PlatformManager_ForgetDisplayVariableRefresh
 #include "bflib_planar.h"
 #include "bflib_sndlib.h"
 #include "bflib_mshandler.hpp"
@@ -339,8 +340,14 @@ static void process_event(const SDL_Event *ev)
                 s_recenter_pending = false;
                 break;
             }
-            int dx = ev->motion.xrel * lbDisplay.MouseMoveRatio + frac_x;
-            int dy = ev->motion.yrel * lbDisplay.MouseMoveRatio + frac_y;
+            // SDL reports the motion in the desktop's units, the game moves its cursor in
+            // its own pixels: on a scaled desktop (125%) the game has 1.25 pixels per unit,
+            // so without this the cursor would cross the screen a fifth slower than the
+            // desktop's pointer does. 1.0 on an unscaled desktop.
+            float ux = 1.0f, uy = 1.0f;
+            GetSDLWindowSystem()->GetPixelsPerWindowUnit(&ux, &uy);
+            int dx = (int)(ev->motion.xrel * ux * lbDisplay.MouseMoveRatio) + frac_x;
+            int dy = (int)(ev->motion.yrel * uy * lbDisplay.MouseMoveRatio) + frac_y;
 
             mouseDelta.x = (dx + 128) >> 8;
             mouseDelta.y = (dy + 128) >> 8;
@@ -509,7 +516,16 @@ static void process_event(const SDL_Event *ev)
         break;
     }
     case SDL_EVENT_WINDOW_MOVED:
+    case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
     {
+        redetect_screen_refresh_rate_for_draw();
+        break;
+    }
+    // A monitor switched modes -- possibly between fixed and variable refresh at
+    // the same rate, which only the desktop can tell -- so ask it again.
+    case SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED:
+    {
+        PlatformManager_ForgetDisplayVariableRefresh();
         redetect_screen_refresh_rate_for_draw();
         break;
     }

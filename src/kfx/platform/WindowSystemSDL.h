@@ -22,6 +22,8 @@ public:
     void RecenterCursor() override;
     bool GetCursorPosition(int* out_x, int* out_y) const override;
     void GetCursorScale(float* out_sx, float* out_sy) const override;
+    /** Drawable pixels per window unit: 1.25 on a desktop scaled to 125%, else 1. */
+    void GetPixelsPerWindowUnit(float* out_sx, float* out_sy) const;
     bool IsCursorInWindow() const override;
 
     bool HasWindow() const override;
@@ -50,6 +52,8 @@ public:
 
     // ----- Display info -----
     int GetDisplayRefreshRate() const override;
+    int GetDisplayVariableRefresh() override;
+    void ForgetDisplayVariableRefresh() override { m_vrr_cached = false; }
 
     // PollInput is a no-op: SDL delivers mouse input via events.
 
@@ -60,9 +64,15 @@ private:
     void ApplyOsCursorPolicy();
     void KeepFullscreenComposited();
     void GetVisibleArea(int* out_x, int* out_y, int* out_w, int* out_h) const;
-    void GetPixelsPerWindowUnit(float* out_sx, float* out_sy) const;
 
     SDL_Window* m_window = nullptr;
+    // GetDisplayVariableRefresh() asks the desktop, which takes a few ms, so the
+    // answer is kept until the window's display or that display's mode changes.
+    unsigned int m_vrr_display = 0;
+    int   m_vrr_w = 0, m_vrr_h = 0;
+    float m_vrr_hz = 0.0f;
+    int   m_vrr_answer = -1;
+    bool  m_vrr_cached = false;
     bool m_appActive = true;
     bool m_useRelativeMouse = true;
     bool m_keepComposited = false;

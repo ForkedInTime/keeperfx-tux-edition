@@ -293,6 +293,15 @@ extern unsigned short display_id;
 
 extern TbBool vsync_enabled;
 
+/** VARIABLE_REFRESH in keeperfx.cfg: whether the monitor shows frames when they
+ *  are ready (FreeSync / G-Sync) or on a fixed beat. AUTO asks the desktop. */
+enum VariableRefreshSetting {
+    VRR_AUTO = 1,
+    VRR_ON   = 2,
+    VRR_OFF  = 3,
+};
+extern int variable_refresh_setting;
+
 extern int requested_renderer_type;
 
 extern TbDisplayStruct lbDisplay;

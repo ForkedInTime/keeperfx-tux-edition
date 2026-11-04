@@ -138,6 +138,11 @@ void RendererClearScreen(unsigned char colour)
         s_active_renderer->ClearScreen(colour);
 }
 
+float RendererLastPresentWaitMs(void)
+{
+    return (s_active_renderer != nullptr) ? s_active_renderer->LastPresentWaitMs() : 0.0f;
+}
+
 void RendererPresentFrame(void)
 {
     if (s_active_renderer != nullptr) {

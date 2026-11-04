@@ -1586,21 +1586,40 @@ void engine(struct PlayerInfo *player, struct Camera *cam)
 }
 
 /**
- * Adaptive draw-rate cap.
+ * Draw-rate cap for FRAMES_PER_SECOND=AUTO.
  *
- * FRAMES_PER_SECOND=AUTO detects the monitor's refresh rate, but detecting it
- * is not the same as being able to sustain it. On a wide, high-refresh display
- * the software renderer can sit permanently at the edge of the budget -- drawing
- * a frame takes about as long as the refresh interval allows -- so ordinary
- * variance overruns and is visibly dropped, with the frame limiter reporting
- * essentially no sleep time in any sample.
+ * AUTO draws one frame per refresh of the monitor the game is on, whatever its
+ * rate -- 60, 144, 240, 360 Hz -- and reads it again when the window moves to
+ * another monitor. Detecting the rate is not the same as sustaining it, so the
+ * cap also watches what this machine actually achieves; there is no table of
+ * machines.
  *
- * Rather than maintain a table of machines, watch what this machine actually
- * achieves and step the cap down to an integer divisor of the refresh rate when
- * it cannot keep up: 144 -> 72 -> 48 -> 36. Divisors keep whole frames aligned
- * to refreshes, so lowering the cap does not introduce judder, and halving the
- * rate doubles the budget, which is what turns a dropped frame into a slow one
- * that still lands on time.
+ * Fixed refresh with vsync: a frame that misses its refresh is held for a whole
+ * extra one, so a machine that cannot keep up shows a mix of short and long
+ * frames. Stepping the cap down to an integer divisor of the refresh rate
+ * (144 -> 72 -> 48 -> 36) makes them even again, but it gives up every frame
+ * that was on time, so it only pays when most frames are late already: the cap
+ * steps down only when at least half the frames miss their refresh, three
+ * seconds running. (It used to step at 10%, which halved 144 to 72 on a machine
+ * that was delivering about 130.) It steps back up once nearly every frame
+ * would fit the faster rate with room to spare -- and, because that test alone
+ * can trap it, it also simply tries the faster rate again after a while: at the
+ * lower rate the processor slows its clock for the lighter load, every frame then
+ * takes longer than it would at full speed (measured: about 8 ms at 72 fps
+ * against about 5 ms at 144 for the same view), and the lowered cap never looks
+ * like it could go back. A retry that fails again waits twice as long for the
+ * next one (30 s, 1, 2, 4 min).
+ *
+ * What is judged is the frame's own work. Time blocked waiting for the display
+ * (vsync) or for the previous frame is the display's pace, not this machine's
+ * cost, and is left out; so are the first two seconds after any stall in drawing
+ * (a level or save loading, a mode change, a pause), whose frames are not typical.
+ *
+ * Variable refresh (FreeSync, G-Sync, VESA Adaptive-Sync): a late frame is shown
+ * as soon as it is ready, so there is nothing to even out and the cap never steps
+ * down. It sits a little under the monitor's top rate, so frames stay inside the
+ * variable range instead of queueing on the top refresh. Without vsync nothing
+ * is held either, and the cap does not step down.
  *
  * Only AUTO adapts. An explicit number in the config is an instruction, not a
  * suggestion, and is never second-guessed.
@@ -1610,41 +1629,82 @@ void engine(struct PlayerInfo *player, struct Camera *cam)
  */
 #define FPS_ADAPT_WINDOW_MS      1000  /* how long each judgement window is */
 #define FPS_ADAPT_MIN_FRAMES       20  /* ignore windows too sparse to judge */
-#define FPS_ADAPT_OVERRUN_PCT      10  /* % of overrunning frames that counts as failing */
+#define FPS_ADAPT_OVERRUN_PCT      50  /* % of late frames that counts as a failing window */
 #define FPS_ADAPT_BAD_WINDOWS       3  /* consecutive failing windows before stepping down */
-#define FPS_ADAPT_GOOD_WINDOWS     15  /* consecutive comfortable windows before stepping back up */
-#define FPS_ADAPT_HEADROOM_PCT     50  /* frame must use less than this % of budget to count as comfortable */
+#define FPS_ADAPT_GOOD_WINDOWS     10  /* consecutive comfortable windows before stepping back up */
+#define FPS_ADAPT_UP_FIT_PCT       85  /* a frame "fits" the faster rate under this % of its budget */
+#define FPS_ADAPT_UP_FRAMES_PCT    95  /* % of frames that must fit before stepping up */
+#define FPS_ADAPT_GAP_MS          250  /* a gap this long between frames is a stall, not a slow frame */
+#define FPS_ADAPT_SETTLE_MS      2000  /* frames this soon after a stall are not judged */
+#define FPS_ADAPT_RETRY_MS      30000  /* at a lowered cap, try the faster rate again after this long */
+#define FPS_ADAPT_RETRY_MAX_MS 240000  /* ... doubling after each failed retry, up to this */
+#define FPS_ADAPT_RETRY_HELD_MS 60000  /* a retry that holds this long counts as a success */
 #define FPS_ADAPT_MIN_FPS          30  /* never step below this */
 #define FPS_ADAPT_MAX_DIVISOR       8
 
 static int32_t fps_adapt_base = 0;      /* the detected refresh rate */
 static int32_t fps_adapt_divisor = 1;
 static TbBool  fps_adapt_active = false;
+static TbBool  fps_adapt_variable = false; /* the display runs a variable refresh rate */
 static TbClockMSec fps_adapt_window_start = 0;
+static TbClockMSec fps_adapt_last_sample = 0;
+static TbClockMSec fps_adapt_settle_until = 0;
 static int fps_adapt_frames = 0;
 static int fps_adapt_overruns = 0;
-static int fps_adapt_comfortable = 0;
+static int fps_adapt_fit_faster = 0;
 static int fps_adapt_bad_windows = 0;
 static int fps_adapt_good_windows = 0;
+static TbClockMSec fps_adapt_retry_at = 0;     /* when to try the faster rate again; 0 = not lowered */
+static TbClockMSec fps_adapt_retry_ms = FPS_ADAPT_RETRY_MS;
+static TbClockMSec fps_adapt_retried_at = 0;   /* when the last retry raised the cap; 0 = none pending */
 
 static void fps_adaptive_reset_window(void)
 {
     fps_adapt_window_start = LbTimerClock();
     fps_adapt_frames = 0;
     fps_adapt_overruns = 0;
-    fps_adapt_comfortable = 0;
+    fps_adapt_fit_faster = 0;
 }
 
-/** Apply the current divisor to the detected refresh rate. */
+/** Frames this soon are not judged (see the comment above). */
+static void fps_adaptive_settle(void)
+{
+    fps_adapt_settle_until = LbTimerClock() + FPS_ADAPT_SETTLE_MS;
+    fps_adapt_bad_windows = 0;
+    fps_adapt_good_windows = 0;
+    fps_adaptive_reset_window();
+}
+
+/** The cap on a variable-refresh display: a little under the top rate
+ *  (3 fps, or 2% on very fast monitors: 144 -> 141, 240 -> 236, 360 -> 353). */
+static int32_t fps_variable_refresh_cap(int32_t refresh)
+{
+    int32_t margin = refresh / 50;
+    if (margin < 3)
+        margin = 3;
+    return (refresh > margin + FPS_ADAPT_MIN_FPS) ? refresh - margin : refresh;
+}
+
+/** Apply the current divisor (or the variable-refresh cap) to the detected refresh rate. */
 static void fps_adaptive_apply(void)
 {
+    if (fps_adapt_variable) {
+        fps_limit_current = fps_variable_refresh_cap(fps_adapt_base);
+        return;
+    }
     int32_t target = fps_adapt_base / fps_adapt_divisor;
     if (target < FPS_ADAPT_MIN_FPS)
         target = FPS_ADAPT_MIN_FPS;
     fps_limit_current = target;
 }
 
-void fps_adaptive_begin(int32_t detected_refresh)
+/** Halving only evens out frames a fixed-refresh display would hold. */
+static TbBool fps_adaptive_may_step_down(void)
+{
+    return vsync_enabled && !fps_adapt_variable;
+}
+
+void fps_adaptive_begin(int32_t detected_refresh, TbBool variable_refresh, const char* how)
 {
     if (detected_refresh <= 0) {
         fps_adapt_active = false;
@@ -1655,17 +1715,25 @@ void fps_adaptive_begin(int32_t detected_refresh)
     // same display must not throw away what has already been learned about it --
     // otherwise the cap is reset to the full refresh rate every time, has to
     // discover the machine cannot sustain it all over again, and can never step
-    // further down than the first divisor.
-    if (fps_adapt_active && (detected_refresh == fps_adapt_base)) {
+    // further down than the first divisor. The frames right after such an event
+    // are not typical, though, so they are not judged.
+    if (fps_adapt_active && (detected_refresh == fps_adapt_base) && (variable_refresh == fps_adapt_variable)) {
         fps_adaptive_apply();
+        fps_adaptive_settle();
         return;
     }
     fps_adapt_base = detected_refresh;
+    fps_adapt_variable = variable_refresh;
     fps_adapt_divisor = 1;
+    fps_adapt_retry_at = 0;
+    fps_adapt_retry_ms = FPS_ADAPT_RETRY_MS;
+    fps_adapt_retried_at = 0;
     fps_adapt_active = true;
-    fps_adapt_bad_windows = 0;
-    fps_adapt_good_windows = 0;
-    fps_adaptive_reset_window();
+    fps_adaptive_apply();
+    fps_adaptive_settle();
+    LbSyncLog("Display refresh %d Hz, %s refresh (%s): draw cap %d%s\n", (int)detected_refresh,
+        variable_refresh ? "variable" : "fixed", how ? how : "", (int)fps_limit_current,
+        fps_adaptive_may_step_down() ? ", lowered only if most frames run late" : "");
 }
 
 void fps_adaptive_stop(void)
@@ -1673,32 +1741,61 @@ void fps_adaptive_stop(void)
     fps_adapt_active = false;
 }
 
-/** Called once per drawn frame with that frame's cost in milliseconds. */
+/** Called once per drawn frame with that frame's own cost in milliseconds
+ *  (time spent waiting on the display already taken out). */
 void fps_adaptive_sample(float frame_ms)
 {
     if (!fps_adapt_active || (fps_limit_current <= 0) || (fps_adapt_base <= 0))
         return;
 
+    const TbClockMSec now = LbTimerClock();
+    if ((fps_adapt_last_sample != 0) && (now - fps_adapt_last_sample > FPS_ADAPT_GAP_MS))
+        fps_adaptive_settle();
+    fps_adapt_last_sample = now;
+    if (now < fps_adapt_settle_until) {
+        fps_adaptive_reset_window();
+        return;
+    }
+    if (!fps_adaptive_may_step_down() && (fps_adapt_divisor == 1))
+        return;
+    if ((fps_adapt_divisor > 1) && (fps_adapt_retry_at != 0) && (now >= fps_adapt_retry_at)) {
+        fps_adapt_divisor--;
+        fps_adaptive_apply();
+        fps_adapt_retried_at = now;
+        fps_adapt_retry_at = (fps_adapt_divisor > 1) ? now + fps_adapt_retry_ms : 0;
+        fps_adapt_bad_windows = 0;
+        fps_adapt_good_windows = 0;
+        fps_adaptive_reset_window();
+        LbSyncLog("adaptive fps: trying the faster rate again; draw cap now %d (refresh %d / %d)\n",
+            (int)fps_limit_current, (int)fps_adapt_base, (int)fps_adapt_divisor);
+        return;
+    }
+    if ((fps_adapt_retried_at != 0) && (now - fps_adapt_retried_at >= FPS_ADAPT_RETRY_HELD_MS)) {
+        fps_adapt_retried_at = 0;
+        fps_adapt_retry_ms = FPS_ADAPT_RETRY_MS;
+    }
+
     const float budget_ms = 1000.0f / (float)fps_limit_current;
+    const float faster_budget_ms = (fps_adapt_divisor > 1) ? 1000.0f * (float)(fps_adapt_divisor - 1) / (float)fps_adapt_base : 0.0f;
     fps_adapt_frames++;
     if (frame_ms > budget_ms)
         fps_adapt_overruns++;
-    else if (frame_ms < budget_ms * (FPS_ADAPT_HEADROOM_PCT / 100.0f))
-        fps_adapt_comfortable++;
+    if ((fps_adapt_divisor > 1) && (frame_ms < faster_budget_ms * (FPS_ADAPT_UP_FIT_PCT / 100.0f)))
+        fps_adapt_fit_faster++;
 
-    if ((LbTimerClock() - fps_adapt_window_start) < FPS_ADAPT_WINDOW_MS)
+    if ((now - fps_adapt_window_start) < FPS_ADAPT_WINDOW_MS)
         return;
 
     if (fps_adapt_frames < FPS_ADAPT_MIN_FRAMES) {
-        /* Too few frames to judge -- a loading pause, a menu, a paused game. */
+        /* Too few frames to judge -- a menu, a paused game. */
         fps_adaptive_reset_window();
         return;
     }
 
     const int overrun_pct = (fps_adapt_overruns * 100) / fps_adapt_frames;
-    const int comfy_pct = (fps_adapt_comfortable * 100) / fps_adapt_frames;
+    const int fit_pct = (fps_adapt_fit_faster * 100) / fps_adapt_frames;
 
-    if (overrun_pct >= FPS_ADAPT_OVERRUN_PCT) {
+    if (fps_adaptive_may_step_down() && (overrun_pct >= FPS_ADAPT_OVERRUN_PCT)) {
         fps_adapt_good_windows = 0;
         fps_adapt_bad_windows++;
         if ((fps_adapt_bad_windows >= FPS_ADAPT_BAD_WINDOWS)
@@ -1708,17 +1805,29 @@ void fps_adaptive_sample(float frame_ms)
             fps_adapt_divisor++;
             fps_adaptive_apply();
             fps_adapt_bad_windows = 0;
-            LbSyncLog("adaptive fps: %d%% of frames overran; draw cap now %d (refresh %d / %d)\n",
-                overrun_pct, (int)fps_limit_current, (int)fps_adapt_base, (int)fps_adapt_divisor);
+            if (fps_adapt_retried_at != 0) {
+                /* the retry did not hold: wait twice as long before the next one */
+                fps_adapt_retry_ms *= 2;
+                if (fps_adapt_retry_ms > FPS_ADAPT_RETRY_MAX_MS)
+                    fps_adapt_retry_ms = FPS_ADAPT_RETRY_MAX_MS;
+                fps_adapt_retried_at = 0;
+            }
+            fps_adapt_retry_at = now + fps_adapt_retry_ms;
+            LbSyncLog("adaptive fps: %d%% of frames ran late; draw cap now %d (refresh %d / %d), faster rate tried again in %d s\n",
+                overrun_pct, (int)fps_limit_current, (int)fps_adapt_base, (int)fps_adapt_divisor, (int)(fps_adapt_retry_ms / 1000));
         }
-    } else if ((comfy_pct >= 90) && (overrun_pct == 0)) {
+    } else if ((fps_adapt_divisor > 1) && (fit_pct >= FPS_ADAPT_UP_FRAMES_PCT)) {
         fps_adapt_bad_windows = 0;
         fps_adapt_good_windows++;
-        if ((fps_adapt_good_windows >= FPS_ADAPT_GOOD_WINDOWS) && (fps_adapt_divisor > 1)) {
+        // A display that no longer holds late frames (vsync turned off, variable
+        // refresh found) has no reason to stay lowered at all.
+        if ((fps_adapt_good_windows >= FPS_ADAPT_GOOD_WINDOWS) || !fps_adaptive_may_step_down()) {
             fps_adapt_divisor--;
             fps_adaptive_apply();
             fps_adapt_good_windows = 0;
-            LbSyncLog("adaptive fps: sustained headroom; draw cap now %d (refresh %d / %d)\n",
+            fps_adapt_retry_ms = FPS_ADAPT_RETRY_MS;
+            fps_adapt_retry_at = (fps_adapt_divisor > 1) ? now + fps_adapt_retry_ms : 0;
+            LbSyncLog("adaptive fps: frames fit the faster rate; draw cap now %d (refresh %d / %d)\n",
                 (int)fps_limit_current, (int)fps_adapt_base, (int)fps_adapt_divisor);
         }
     } else {
@@ -1727,6 +1836,24 @@ void fps_adaptive_sample(float frame_ms)
         fps_adapt_good_windows = 0;
     }
     fps_adaptive_reset_window();
+}
+
+/** Whether the game's display runs a variable refresh rate: VARIABLE_REFRESH
+ *  in keeperfx.cfg, or for AUTO the desktop's answer (unknown counts as fixed,
+ *  the behaviour of every earlier build). */
+static TbBool display_has_variable_refresh(const char** how)
+{
+    if (variable_refresh_setting == VRR_ON) {
+        *how = "VARIABLE_REFRESH=ON";
+        return true;
+    }
+    if (variable_refresh_setting == VRR_OFF) {
+        *how = "VARIABLE_REFRESH=OFF";
+        return false;
+    }
+    const int answer = PlatformManager_GetDisplayVariableRefresh();
+    *how = (answer < 0) ? "the desktop does not say; VARIABLE_REFRESH=ON tells the game" : "as the desktop reports";
+    return (answer == 1);
 }
 
 void redetect_screen_refresh_rate_for_draw()
@@ -1744,8 +1871,9 @@ void redetect_screen_refresh_rate_for_draw()
         // equivalent.
         int refresh_rate = PlatformManager_GetDisplayRefreshRate();
         if (refresh_rate > 0) {
-            fps_limit_current = refresh_rate;
-            fps_adaptive_begin(fps_limit_current);
+            const char* how = "";
+            const TbBool variable = display_has_variable_refresh(&how);
+            fps_adaptive_begin(refresh_rate, variable, how);
         }
 
     } else if (fps_limit_main > 0) {

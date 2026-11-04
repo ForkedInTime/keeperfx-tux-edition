@@ -451,6 +451,9 @@ void RendererSoftware::PresentFrame()
     {
         SDL_RenderTexture(m_renderer, m_texture, NULL, (pw > 0 && ph > 0) ? &dst : NULL);
     }
+    // With vsync on this blocks until the display takes the frame.
+    const Uint64 present_start = SDL_GetTicksNS();
     SDL_RenderPresent(m_renderer);
+    m_present_wait_ms = (float)(SDL_GetTicksNS() - present_start) / 1000000.0f;
     LbMouseOnEndSwap();
 }

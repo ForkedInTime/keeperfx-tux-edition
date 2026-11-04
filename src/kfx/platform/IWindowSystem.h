@@ -140,6 +140,12 @@ public:
      *  Returns 0 when unavailable or not applicable (consoles with fixed rate). */
     virtual int GetDisplayRefreshRate() const { return 0; }
 
+    /** Whether that display runs a variable refresh rate right now:
+     *  1 yes, 0 no, -1 unknown. */
+    virtual int GetDisplayVariableRefresh() { return -1; }
+    /** Ask the desktop again next time (a display's mode changed). */
+    virtual void ForgetDisplayVariableRefresh() {}
+
     // ----- Per-frame poll -----
 
     /** Called once per event-poll cycle.  SDL: no-op (input arrives via events). */

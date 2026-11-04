@@ -40,6 +40,9 @@ void         PlatformManager_SetGameSurfaceSize(int w, int h);
 int          PlatformManager_GetCursorPosition(int* x, int* y);
 int          PlatformManager_IsCursorInWindow(void);
 int          PlatformManager_GetDisplayRefreshRate(void);
+/** 1 when the game's display runs a variable refresh rate, 0 fixed, -1 unknown. */
+int          PlatformManager_GetDisplayVariableRefresh(void);
+void         PlatformManager_ForgetDisplayVariableRefresh(void);
 
 // Move abs_path into the OS-native trash/recycle bin. Returns 1 on success, 0
 // on failure ("not trashed" -- see IPlatform::TrashFile for the
