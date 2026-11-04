@@ -260,6 +260,10 @@ bool RendererOpenGL::Init()
     {
         ERRORLOG("RendererOpenGL::Init: could not create a GL context "
                  "(the window needs the flags from RendererGetRequiredWindowFlags())");
+        // An OpenGL window is created hidden and shown here once its context
+        // exists. Without one, the game carries on with the software renderer
+        // in this same window, which must not stay invisible.
+        ws->ShowWindow();
         return false;
     }
 

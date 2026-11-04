@@ -84,7 +84,7 @@ unsigned short display_id = 0;
 TbBool vsync_enabled = 1;
 
 /** Requested renderer backen; set from keeperfx.cfg (RENDERER) */
-int requested_renderer_type = RENDERER_SOFTWARE;
+int requested_renderer_type = RENDERER_OPENGL;
 
 static unsigned char fade_started;
 static unsigned char from_pal[PALETTE_SIZE];
@@ -518,7 +518,17 @@ TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord hei
         // Bake the active renderer backend's required SDL3 capability flags
         // (e.g. KFX_WF_OPENGL) into the window at birth
         unsigned int window_flags = mdinfo->windowFlags | RendererGetRequiredWindowFlags((RendererType)requested_renderer_type);
-        if (PlatformManager_CreateWindow(lbDrawAreaTitle, mdinfo->window_pos_x, mdinfo->window_pos_y, mdinfo->Width, mdinfo->Height, window_flags) == 0)
+        int window_made = PlatformManager_CreateWindow(lbDrawAreaTitle, mdinfo->window_pos_x, mdinfo->window_pos_y, mdinfo->Width, mdinfo->Height, window_flags);
+        // An OpenGL window cannot be made where there is no OpenGL at all (no GLX
+        // or EGL); the software renderer needs no such window, so try again as one.
+        if ((window_made == 0) && (requested_renderer_type == RENDERER_OPENGL))
+        {
+            WARNLOG("No OpenGL window on this display (%s); using the software renderer instead", SDL_GetError());
+            requested_renderer_type = RENDERER_SOFTWARE;
+            window_flags = mdinfo->windowFlags | RendererGetRequiredWindowFlags((RendererType)requested_renderer_type);
+            window_made = PlatformManager_CreateWindow(lbDrawAreaTitle, mdinfo->window_pos_x, mdinfo->window_pos_y, mdinfo->Width, mdinfo->Height, window_flags);
+        }
+        if (window_made == 0)
         {
             ERRORLOG("PlatformManager_CreateWindow failed for mode %d (%s): %s", (int)mode, mdinfo->Desc, SDL_GetError());
             return Lb_FAIL;
