@@ -63,12 +63,23 @@ bool GLImagePresentPass::CompileShaders()
     zoom_desc.debug_name = "rawimage_zoom";
     m_zoom_shader_handle = m_resource_mapper->RequestCreateProgram(zoom_desc);
 
+    GpuProgramDesc rgb_desc;
+    rgb_desc.vertex_src = RAWIMAGE_VERTEX_SHADER;
+    rgb_desc.fragment_src = RAWIMAGE_RGB_FRAGMENT_SHADER;
+    rgb_desc.debug_name = "rawimage_rgb";
+    m_rgb_shader_handle = m_resource_mapper->RequestCreateProgram(rgb_desc);
+
     const GLProgram* shader = m_resource_mapper->ResolveProgram(m_shader_handle);
     const GLProgram* transparent_shader = m_resource_mapper->ResolveProgram(m_transparent_shader_handle);
     const GLProgram* coverage_shader = m_resource_mapper->ResolveProgram(m_coverage_shader_handle);
     const GLProgram* zoom_shader = m_resource_mapper->ResolveProgram(m_zoom_shader_handle);
+    const GLProgram* rgb_shader = m_resource_mapper->ResolveProgram(m_rgb_shader_handle);
     if (!shader || !transparent_shader || !coverage_shader || !zoom_shader)
         return false;
+    // A missing true-colour program costs only the movies' colours: without it
+    // PresentImage() refuses RGB24 and the movie player falls back to 8-bit.
+    if (!rgb_shader)
+        m_rgb_shader_handle = kInvalidGpuResource;
 
     glUseProgram(shader->id);
     glUniform1i(glGetUniformLocation(shader->id, "u_image"), 0);
@@ -83,6 +94,12 @@ bool GLImagePresentPass::CompileShaders()
     glUniform1i(glGetUniformLocation(coverage_shader->id, "u_image"), 0);
     glUniform1i(glGetUniformLocation(coverage_shader->id, "u_palette"), 1);
     glUniform1i(glGetUniformLocation(coverage_shader->id, "u_coverage"), 2);
+
+    if (rgb_shader)
+    {
+        glUseProgram(rgb_shader->id);
+        glUniform1i(glGetUniformLocation(rgb_shader->id, "u_image"), 0);
+    }
 
     glUseProgram(zoom_shader->id);
     glUniform1i(glGetUniformLocation(zoom_shader->id, "u_image"), 0);
@@ -144,6 +161,7 @@ void GLImagePresentPass::Shutdown()
     m_overlay_tex_gt_w = m_overlay_tex_gt_h = 0;
     m_coverage_tex_gt_w = m_coverage_tex_gt_h = 0;
     m_zoom_tex_gt_w = m_zoom_tex_gt_h = 0;
+    m_video_tex_gt_w = m_video_tex_gt_h = 0;
     m_zoom_active_last_frame = false;
     m_rt_zoom_pixels.clear();
     m_rt_zoom_pixels_w = m_rt_zoom_pixels_h = 0;
@@ -168,14 +186,17 @@ static void fill_cmd(IRImagePresentCmd& dst, const struct RendererPresentImageDe
     dst.src_w = desc->src_w;
     dst.src_h = desc->src_h;
     dst.palette = desc->palette;
+    dst.format = desc->format;
 
-    dst.pixels.resize((size_t)desc->src_w * (size_t)desc->src_h);
-    const int pitch = (desc->src_pitch > 0) ? desc->src_pitch : desc->src_w;
+    const size_t bpp = (desc->format == PRESENT_FORMAT_RGB24) ? 3 : 1;
+    const size_t row_bytes = (size_t)desc->src_w * bpp;
+    dst.pixels.resize(row_bytes * (size_t)desc->src_h);
+    const size_t pitch = (desc->src_pitch > 0) ? (size_t)desc->src_pitch : row_bytes;
     for (int row = 0; row < desc->src_h; ++row)
     {
-        std::memcpy(&dst.pixels[(size_t)row * desc->src_w],
+        std::memcpy(&dst.pixels[(size_t)row * row_bytes],
                      desc->src + (size_t)row * pitch,
-                     (size_t)desc->src_w);
+                     row_bytes);
     }
 
     if (desc->palette == PRESENT_PALETTE_EMBEDDED && desc->embedded_palette != nullptr)
@@ -189,18 +210,19 @@ static void fill_cmd(IRImagePresentCmd& dst, const struct RendererPresentImageDe
         dst.coverage.clear();
 }
 
-void GLImagePresentPass::EnsureImageTextureHandle(GpuResourceHandle& handle, int& gt_w, int& gt_h, int new_w, int new_h)
+void GLImagePresentPass::EnsureImageTextureHandle(GpuResourceHandle& handle, int& gt_w, int& gt_h, int new_w, int new_h,
+                                                  bool truecolor)
 {
     if (!m_resource_mapper) return;
 
     GpuTextureDesc desc;
     desc.width = new_w;
     desc.height = new_h;
-    desc.format = GpuTextureFormat::R8;
-    desc.min_filter = GpuTextureFilter::Nearest;
-    desc.mag_filter = GpuTextureFilter::Nearest;
+    desc.format = truecolor ? GpuTextureFormat::RGBA8 : GpuTextureFormat::R8;
+    desc.min_filter = truecolor ? GpuTextureFilter::Linear : GpuTextureFilter::Nearest;
+    desc.mag_filter = truecolor ? GpuTextureFilter::Linear : GpuTextureFilter::Nearest;
     desc.wrap = GpuTextureWrap::Clamp;
-    desc.debug_name = "image_present";
+    desc.debug_name = truecolor ? "movie_present" : "image_present";
 
     if (handle == kInvalidGpuResource)
     {
@@ -240,8 +262,12 @@ void GLImagePresentPass::Submit(const struct RendererPresentImageDesc* desc)
         fill_cmd(m_cmds.back(), desc);
         if (idx >= m_opaque_slots.size())
             m_opaque_slots.resize(idx + 1);
-        EnsureImageTextureHandle(m_opaque_slots[idx].tex_handle, m_opaque_slots[idx].tex_gt_w, m_opaque_slots[idx].tex_gt_h,
-                                 desc->src_w, desc->src_h);
+        if (desc->format == PRESENT_FORMAT_RGB24)
+            EnsureImageTextureHandle(m_video_tex_handle, m_video_tex_gt_w, m_video_tex_gt_h,
+                                     desc->src_w, desc->src_h, true);
+        else
+            EnsureImageTextureHandle(m_opaque_slots[idx].tex_handle, m_opaque_slots[idx].tex_gt_w, m_opaque_slots[idx].tex_gt_h,
+                                     desc->src_w, desc->src_h);
     }
 }
 
@@ -298,6 +324,21 @@ void GLImagePresentPass::upload_opaque_texture(size_t idx)
     const GLTexture* tex = m_resource_mapper->ResolveTexture(m_opaque_slots[idx].tex_handle);
     if (!tex) return;
     upload_indexed8_content(tex->id, m_rt_cmds[idx].pixels.data(), m_rt_cmds[idx].src_w, m_rt_cmds[idx].src_h);
+}
+
+void GLImagePresentPass::upload_video_texture(size_t idx)
+{
+    if (!m_resource_mapper || idx >= m_rt_cmds.size()) return;
+    const GLTexture* tex = m_resource_mapper->ResolveTexture(m_video_tex_handle);
+    if (!tex) return;
+    // Packed RGB rows, so no row padding: alignment 1. The RGBA8 texture takes
+    // GL_RGB data directly (alpha reads as 1).
+    glBindTexture(GL_TEXTURE_2D, tex->id);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_rt_cmds[idx].src_w, m_rt_cmds[idx].src_h,
+                    GL_RGB, GL_UNSIGNED_BYTE, m_rt_cmds[idx].pixels.data());
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 void GLImagePresentPass::upload_overlay_texture()
@@ -493,6 +534,18 @@ void GLImagePresentPass::Resolve(int screen_w, int screen_h)
         // entry draws through its own texture slot (m_opaque_slots[i]).
         for (size_t i = 0; i < m_rt_cmds.size() && i < m_opaque_slots.size(); ++i)
         {
+            if (m_rt_cmds[i].format == PRESENT_FORMAT_RGB24)
+            {
+                const GLProgram* rgb_prog = m_resource_mapper->ResolveProgram(m_rgb_shader_handle);
+                upload_video_texture(i);
+                const GLTexture* vtex = m_resource_mapper->ResolveTexture(m_video_tex_handle);
+                if (rgb_prog == nullptr || vtex == nullptr)
+                    continue;
+                draw_quad(rgb_prog->id, vtex->id, 0,
+                         m_rt_cmds[i].dst_x, m_rt_cmds[i].dst_y, m_rt_cmds[i].dst_w, m_rt_cmds[i].dst_h,
+                         screen_w, screen_h);
+                continue;
+            }
             upload_opaque_texture(i);
             const GLTexture* tex = m_resource_mapper->ResolveTexture(m_opaque_slots[i].tex_handle);
             if (tex == nullptr)

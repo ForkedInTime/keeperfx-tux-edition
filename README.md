@@ -89,7 +89,8 @@ build; this edition is the Linux half they don't ship, plus the bugs found on th
   correctness and security fixes (crafted maps and mods, map scripts that could change your files or run code
   outside the game, chat and replays that could act on your machine), ~30 gameplay bugs found in players'
   games, and ~10 crashes.
-- ⚡ **Performance** — frame pacing matched to your monitor, and the map view no longer costs a processor core.
+- ⚡ **Performance** — the graphics card draws the game by default, frame pacing matched to your monitor, and
+  the map view no longer costs a processor core.
 - 🧰 **Launcher** — Workshop browser, Mod Manager, and a built-in updater with separate stable and alpha
   channels.
 

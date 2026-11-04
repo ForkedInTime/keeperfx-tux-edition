@@ -1074,6 +1074,20 @@ void main()
 }
 )glsl";
 
+// Unit 0 = image (RGBA8 holding an RGB24 movie frame). No palette: the colours
+// are the film's own, which is the point -- the 6x6x6 dither the 8-bit path
+// needs for a movie is what this replaces.
+constexpr const char* RAWIMAGE_RGB_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in vec2 v_uv;
+uniform sampler2D u_image;
+out vec4 fragColor;
+void main()
+{
+    fragColor = vec4(texture(u_image, v_uv).rgb, 1.0);
+}
+)glsl";
+
 // Unit 0 = image (R8 palette-index). Unit 1 = palette (256x1 RGBA8).
 constexpr const char* RAWIMAGE_BLIT_FRAGMENT_SHADER = R"glsl(
 #version 330 core

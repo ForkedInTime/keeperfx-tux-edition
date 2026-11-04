@@ -2373,7 +2373,20 @@ int LbBullfrogMain(unsigned short argc, char *argv[])
         return 0;
     }
 
-    retval &= (RendererInit((RendererType)requested_renderer_type) != 0);
+    // OpenGL is the default, and a machine without OpenGL 3.3 (an old GPU, a VM,
+    // a broken driver) must still start the game rather than stop at a fatal
+    // error: fall back to the software renderer, which needs nothing from the GPU.
+    if (RendererInit((RendererType)requested_renderer_type) == 0)
+    {
+        if (requested_renderer_type == RENDERER_OPENGL)
+        {
+            WARNLOG("The OpenGL renderer could not start on this machine; using the software renderer instead (RENDERER=SOFTWARE in keeperfx.cfg skips this attempt)");
+            requested_renderer_type = RENDERER_SOFTWARE;
+            retval &= (RendererInit(RENDERER_SOFTWARE) != 0);
+        } else {
+            retval = false;
+        }
+    }
     RendererSettings_Load();
     PlatformManager_SetWindowTitle(PROGRAM_NAME);
     LbSetIcon(1);

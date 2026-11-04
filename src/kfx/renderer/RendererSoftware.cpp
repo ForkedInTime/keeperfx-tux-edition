@@ -59,6 +59,13 @@ bool RendererSoftware::ensure_present_target()
         destroy_present_target();
     if (m_renderer == nullptr)
     {
+        // SDL picks its own output (OpenGL, Vulkan, ...) for this renderer. The
+        // OpenGL backend's context requests (3.3 core, forward-compatible) are
+        // global SDL state set when the window was made, and they outlive a
+        // failed OpenGL start: left in place, SDL's own OpenGL output cannot make
+        // its context and SDL settles for something else. This backend never
+        // makes a context of its own, so it drops those requests first.
+        SDL_GL_ResetAttributes();
         m_renderer = SDL_CreateRenderer(window, NULL);
         if (m_renderer == nullptr)
         {
