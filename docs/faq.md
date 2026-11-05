@@ -100,4 +100,5 @@ the log attached, and not to the KeeperFX team: they don't build or ship this ed
 
 That was this project's first name, before it had a stable channel (the Flatpak's ID keeps it too).
 The folder holds every install's saves, settings and add-ons, so it keeps the name rather than move
-them; stable and alpha builds both use it.
+them; stable and alpha builds both use it. The AppImage can use another folder:
+[`KFX_ALPHA_PREFIX`](install.md#keep-the-game-in-another-folder-lutris-another-drive).
