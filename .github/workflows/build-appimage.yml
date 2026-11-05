@@ -579,6 +579,10 @@ jobs:
           export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-xcb}"
           INSTALL="${KFX_ALPHA_PREFIX:-$HOME/.local/share/keeperfx-alpha}"
           mkdir -p "$INSTALL"
+          # Absolute from here on: the launcher is started by this path after the cd at
+          # the end, and the menu entry records it, so a relative KFX_ALPHA_PREFIX must
+          # not be read twice from two different directories.
+          INSTALL="$(cd "$INSTALL" && pwd)"
           # Don't let our bundled glib load the SYSTEM gvfs/gio modules (symbol mismatch
           # on newer distros: 'g_variant_builder_init_static' undefined). Point GIO at an
           # empty dir so it loads none — Qt's own file dialogs are unaffected.
@@ -587,7 +591,21 @@ jobs:
           # deploy the bundled game once (or when the version changes)
           NEWVER="$(cat "$HERE/payload/version.txt" 2>/dev/null)"
           if [ "$(cat "$INSTALL/.bundled-version" 2>/dev/null)" != "$NEWVER" ]; then
-            cp -rf "$HERE/payload/." "$INSTALL/"
+            # keeperfx.cfg holds the player's settings, so a folder that already has one
+            # keeps it. The release's own copy goes to _keeperfx.cfg, from which the
+            # launcher adds any setting the player's file lacks at its next start, the
+            # same as an update from inside the launcher (updatedialog.cpp, settings.cpp
+            # copyMissingAlphaSettings). Entry by entry, so the player's file is never
+            # overwritten even for a moment.
+            shopt -s dotglob nullglob
+            for entry in "$HERE/payload/"*; do
+              if [ "${entry##*/}" = keeperfx.cfg ] && [ -f "$INSTALL/keeperfx.cfg" ]; then
+                cp -f "$entry" "$INSTALL/_keeperfx.cfg"
+              else
+                cp -rf "$entry" "$INSTALL/"
+              fi
+            done
+            shopt -u dotglob nullglob
             echo "$NEWVER" > "$INSTALL/.bundled-version"
           fi
           # The launcher + 7z.so live in the payload (deployed above), so an in-launcher
@@ -597,16 +615,37 @@ jobs:
           [ -f "$INSTALL/7z.so" ] || cp -f "$HERE/payload/7z.so" "$INSTALL/7z.so" 2>/dev/null || true
           # Add an applications-menu entry so it's launchable like any installed game,
           # not just by finding the AppImage file. $APPIMAGE is the AppImage's own path.
-          if [ -n "$APPIMAGE" ]; then
+          # KFX_NO_DESKTOP_ENTRY=1 skips it and leaves the home folder alone: for game
+          # managers such as Lutris, which make their own entry and keep the game in their
+          # own folder through KFX_ALPHA_PREFIX.
+          if [ -n "$APPIMAGE" ] && { [ -z "${KFX_NO_DESKTOP_ENTRY:-}" ] || [ "$KFX_NO_DESKTOP_ENTRY" = 0 ]; }; then
             appdir="$HOME/.local/share/applications"; icondir="$HOME/.local/share/icons"
             mkdir -p "$appdir" "$icondir"
             cp -f "$HERE/usr/share/icons/hicolor/256x256/apps/keeperfx-launcher-qt.png" "$icondir/keeperfx-linux-alpha.png" 2>/dev/null || true
+            # One Exec argument as the desktop-entry spec wants it: in double quotes, with
+            # " ` $ \ escaped by a backslash that the file's own string escaping doubles,
+            # and % doubled.
+            exec_arg() {
+              local s="$1"
+              s="${s//\\/\\\\\\\\}"
+              s="${s//\"/\\\\\"}"
+              s="${s//\`/\\\\\`}"
+              s="${s//\$/\\\\\$}"
+              s="${s//%/%%}"
+              printf '"%s"' "$s"
+            }
+            exec_line="$(exec_arg "$APPIMAGE")"
+            # Started with its own folder, the entry starts it with that folder again;
+            # otherwise the menu would open a second, empty install in the default one.
+            if [ -n "${KFX_ALPHA_PREFIX:-}" ]; then
+              exec_line="env $(exec_arg "KFX_ALPHA_PREFIX=$INSTALL") $exec_line"
+            fi
             {
               echo "[Desktop Entry]"
               echo "Type=Application"
               echo "Name=KeeperFX Tux Edition"
               echo "Comment=Dungeon Keeper, native on Linux"
-              echo "Exec=\"$APPIMAGE\""
+              echo "Exec=$exec_line"
               echo "Icon=$icondir/keeperfx-linux-alpha.png"
               echo "Terminal=false"
               echo "Categories=Game;StrategyGame;"
