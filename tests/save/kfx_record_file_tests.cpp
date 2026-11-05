@@ -1,11 +1,10 @@
 /******************************************************************************/
 /** @file kfx_record_file_tests.cpp
- *     Standalone tests for the files of records (network config, high scores, continue files)
+ *     Standalone tests for the files of records (high scores, continue files)
  *     and the whole-file helpers, against an in-memory file system.
  */
 /******************************************************************************/
 #include "pre_inc.h"
-#include "front_network.h"
 #include "config_campaigns.h"
 #include "game_merge.h"
 #include "kfx/save/SaveTypes.h"
@@ -37,46 +36,6 @@ static void expect(const char *what, bool cond)
     }
 }
 
-static bool write_net(MemoryFileSystem &fs, const char *fname, const ConfigInfo &ci)
-{
-    return savefile::WriteRecord(fs, fname, ci);
-}
-
-static enum SaveResult read_net(MemoryFileSystem &fs, const char *fname, ConfigInfo &ci, SaveError &err)
-{
-    return savefile::ReadRecord(fs, fname, ci, &err);
-}
-
-static void test_net_config()
-{
-    MemoryFileSystem fs;
-    SaveError err;
-    ConfigInfo ci, back;
-    memset(&ci, 0, sizeof(ci));
-    strcpy(ci.net_player_name, "Tester");
-    strcpy(ci.str_join, "127.0.0.1");
-    expect("net config written", write_net(fs, "net.cfg", ci));
-    memset(&back, 0x7e, sizeof(back));
-    expect("net config read", read_net(fs, "net.cfg", back, err) == SVR_Ok);
-    expect("net config equal", memcmp(&ci, &back, sizeof(ci)) == 0);
-
-    memset(&back, 0x7e, sizeof(back));
-    expect("missing file is NotFound", read_net(fs, "none.cfg", back, err) == SVR_NotFound);
-    expect("output untouched when the file is missing", ((unsigned char *)&back)[0] == 0x7e);
-
-    fs.files["cut.cfg"] = std::vector<uint8_t>(fs.files["net.cfg"].begin(), fs.files["net.cfg"].begin() + 20);
-    expect("cut file refused", read_net(fs, "cut.cfg", back, err) != SVR_Ok);
-    expect("output untouched when the file is cut", ((unsigned char *)&back)[0] == 0x7e);
-
-    fs.files["empty.cfg"];
-    expect("zero-length file refused", read_net(fs, "empty.cfg", back, err) != SVR_Ok);
-    expect("output untouched for a zero-length file", ((unsigned char *)&back)[0] == 0x7e);
-
-    fs.fail_writes = true;
-    expect("write failure is reported", !write_net(fs, "net2.cfg", ci));
-    expect("failed write leaves no file", !fs.Exists("net2.cfg"));
-}
-
 static void test_high_scores()
 {
     MemoryFileSystem fs;
@@ -103,8 +62,8 @@ static void test_high_scores()
     fs.files["half.dat"] = std::vector<uint8_t>(flipped.begin(), flipped.begin() + flipped.size() / 2);
     expect("half a high score file refused", (savefile::ReadRecords(fs, "half.dat", back, &err) != SVR_Ok) && back.empty());
 
-    ConfigInfo ci;
-    expect("a high score file is not a net config", read_net(fs, "scr.dat", ci, err) == SVR_Damaged);
+    ContinueData cd;
+    expect("a high score file is not a link", savefile::ReadRecord(fs, "scr.dat", cd, &err) == SVR_Damaged);
 }
 
 static void test_continue_files()
@@ -117,9 +76,22 @@ static void test_continue_files()
     memset(&il2, 0x55, sizeof(il2));
     il.continue_level = 7;
     il.levels_completed[2] = 9;
-    expect("progress written", savefile::WriteRecord(fs, "p.cid", il));
-    expect("progress read", savefile::ReadRecord(fs, "p.cid", il2, &err) == SVR_Ok);
+    std::vector<uint8_t> custom;
+    const char blob[] = "custom\0bytes";
+    expect("progress written", campaignprogress::Write(fs, "p.cid", &il, blob, sizeof(blob)));
+    expect("progress read", campaignprogress::Read(fs, "p.cid", &il2, &custom, &err) == SVR_Ok);
     expect("progress equal", memcmp(&il, &il2, sizeof(il)) == 0);
+    expect("custom data equal", custom.size() == sizeof(blob) && memcmp(custom.data(), blob, sizeof(blob)) == 0);
+
+    memset(&il2, 0x55, sizeof(il2));
+    expect("progress without custom data written", campaignprogress::Write(fs, "p0.cid", &il, nullptr, 0));
+    expect("progress without custom data read", campaignprogress::Read(fs, "p0.cid", &il2, &custom, &err) == SVR_Ok
+        && custom.empty() && memcmp(&il, &il2, sizeof(il)) == 0);
+
+    memset(&il2, 0x55, sizeof(il2));
+    expect("old progress written", savefile::detail::WriteRecords(fs, "old.cid", SFK_Continue, &save_desc_IntralevelData, &il, sizeof(il), 1));
+    expect("old progress read", campaignprogress::Read(fs, "old.cid", &il2, &custom, &err) == SVR_Ok
+        && custom.empty() && memcmp(&il, &il2, sizeof(il)) == 0);
 
     memset(&cd, 0, sizeof(cd));
     memset(&cd2, 0, sizeof(cd2));
@@ -128,6 +100,7 @@ static void test_continue_files()
     expect("link read", (savefile::ReadRecord(fs, "last.sav", cd2, &err) == SVR_Ok)
         && (strcmp(cd2.link_fname, "fx1g0003.sav") == 0));
     expect("a progress file is not a link", savefile::ReadRecord(fs, "p.cid", cd2, &err) != SVR_Ok);
+    expect("a link is not a progress file", campaignprogress::Read(fs, "last.sav", &il2, &custom, &err) != SVR_Ok);
 }
 
 static void test_whole_files()
@@ -162,7 +135,6 @@ static void test_keep_unreadable()
 
 int main()
 {
-    test_net_config();
     test_high_scores();
     test_continue_files();
     test_whole_files();

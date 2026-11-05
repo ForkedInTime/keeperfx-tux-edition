@@ -1015,7 +1015,6 @@ TngUpdateRet switch_object_on_destoyed_slab_to_new_owner(struct Thing *thing, Mo
 static void update_thing_animation(struct Thing *thing)
 {
     SYNCDBG(18,"Starting for %s",thing_model_name(thing));
-    int i;
     struct CreatureControl *cctrl;
     if (thing->class_id == TCls_Creature)
     {
@@ -1023,28 +1022,7 @@ static void update_thing_animation(struct Thing *thing)
       if (!creature_control_invalid(cctrl))
         cctrl->anim_time = thing->anim_time;
     }
-    if ((thing->anim_speed != 0) && (thing->max_frames != 0))
-    {
-        thing->anim_time += thing->anim_speed;
-        i = (thing->max_frames << 8);
-        if (i <= 0) i = 256;
-        while (thing->anim_time  < 0)
-        {
-          thing->anim_time += i;
-        }
-        if (thing->anim_time > i-1)
-        {
-          if (thing->rendering_flags & TRF_AnimateOnce)
-          {
-            thing->anim_speed = 0;
-            thing->anim_time = i-1;
-          } else
-          {
-            thing->anim_time %= i;
-          }
-        }
-        thing->current_frame = thing->anim_time >> 8;
-    }
+    advance_thing_animation(thing);
     if (thing->transformation_speed != 0)
     {
       thing->sprite_size += thing->transformation_speed;
@@ -1536,14 +1514,18 @@ void setup_computer_player(int plr_idx)
     }
 }
 
-void setup_computer_players(void)
+void setup_computer_players(PlayerBitFlags zombie_players)
 {
     for (int plr_idx = 0; plr_idx < PLAYERS_COUNT; plr_idx++)
     {
         struct PlayerInfo* player = get_player(plr_idx);
-        if (!player_exists(player))
-        {
-          setup_computer_player(plr_idx);
+        if (player_exists(player)) {
+            continue;
+        }
+        if (flag_is_set(zombie_players, to_flag(plr_idx))) {
+            script_support_setup_player_as_zombie_keeper(plr_idx);
+        } else {
+            setup_computer_player(plr_idx);
         }
     }
 }
@@ -2807,6 +2789,29 @@ GoldAmount compute_player_payday_total(const struct Dungeon *dungeon)
             break;
         }
     }
+    i = dungeon->digger_list_start;
+    while (i != 0)
+    {
+        struct Thing* thing = thing_get(i);
+        TRACE_THING(thing);
+        struct CreatureControl* cctrl = creature_control_get_from_thing(thing);
+        if (thing_is_invalid(thing) || creature_control_invalid(cctrl))
+        {
+            ERRORLOG("Jump to invalid creature (%d) detected for %s.", i, player_code_name(dungeon->owner));
+            break;
+        }
+        i = cctrl->players_next_creature_idx;
+        // Thing list loop body
+        total_pay += calculate_correct_creature_pay(thing);
+        // Thing list loop body ends
+        k++;
+        if (k > CREATURES_COUNT)
+        {
+            ERRORLOG("Infinite loop detected when sweeping diggers list");
+            break;
+        }
+    }
+
     SYNCDBG(19,"Finished");
     return total_pay;
 }
@@ -3415,29 +3420,7 @@ TbBool update_thing(struct Thing *thing)
         set_flag(thing->state_flags, TF1_PushAdd);
     }
     if (falling || ((thing->movement_flags & TMvF_Immobile) == 0)) {
-        if ((thing->state_flags & TF1_PushAdd) != 0)
-        {
-            thing->veloc_base.x.val += thing->veloc_push_add.x.val;
-            thing->veloc_base.y.val += thing->veloc_push_add.y.val;
-            thing->veloc_base.z.val += thing->veloc_push_add.z.val;
-            thing->veloc_push_add.x.val = 0;
-            thing->veloc_push_add.y.val = 0;
-            thing->veloc_push_add.z.val = 0;
-            thing->state_flags &= ~TF1_PushAdd;
-        }
-        thing->velocity.x.val = thing->veloc_base.x.val;
-        thing->velocity.y.val = thing->veloc_base.y.val;
-        thing->velocity.z.val = thing->veloc_base.z.val;
-        if ((thing->state_flags & TF1_PushOnce) != 0)
-        {
-          thing->velocity.x.val += thing->veloc_push_once.x.val;
-          thing->velocity.y.val += thing->veloc_push_once.y.val;
-          thing->velocity.z.val += thing->veloc_push_once.z.val;
-          thing->veloc_push_once.x.val = 0;
-          thing->veloc_push_once.y.val = 0;
-          thing->veloc_push_once.z.val = 0;
-          thing->state_flags &= ~TF1_PushOnce;
-        }
+        apply_thing_pushes_to_velocity(thing);
     }
     if (thing->class_id < sizeof(class_functions)/sizeof(class_functions[0]))
         classfunc = class_functions[thing->class_id];
@@ -3467,7 +3450,7 @@ TbBool update_thing(struct Thing *thing)
         thing->veloc_base.y.val = thing->veloc_base.y.val * (256 - thing->inertia_air) / 256;
     }
     else {
-        if ((thing->class_id != TCls_EffectElem) && !flag_is_set(thing->movement_flags, TMvF_Immobile) && (thing->fall_acceleration != 0) && (thing->mappos.z.val <= 0) && !thing_can_traverse_abyss_at(thing, thing->mappos.x.stl.num, thing->mappos.y.stl.num)) {
+        if (thing_starts_falling_into_abyss(thing)) {
             set_flag(thing->state_flags, TF1_FallingIntoAbyss);
             falling = true;
             thing->veloc_base.x.val = thing->velocity.x.val;
@@ -3480,7 +3463,7 @@ TbBool update_thing(struct Thing *thing)
         }
     }
     if (falling && (thing->mappos.z.val <= -subtile_coord(ABYSS_DEPTH, 0))) {
-        if (thing_is_creature(thing)) 
+        if (thing_is_creature(thing))
         {
             lua_on_creature_fell_into_abyss(thing);
             if (!flag_is_set(thing->state_flags, TF1_FallingIntoAbyss)) {
@@ -3513,42 +3496,7 @@ TbBool update_thing(struct Thing *thing)
     }
     SYNCDBG(18,"Class function end ok");
     if (!falling && ((thing->movement_flags & TMvF_Immobile) == 0)) {
-        if ((thing->mappos.z.val > thing->floor_height) || !thing_can_traverse_abyss_at(thing, thing->mappos.x.stl.num, thing->mappos.y.stl.num)) {
-            if (thing->veloc_base.x.val != 0)
-                thing->veloc_base.x.val = thing->veloc_base.x.val * (256 - thing->inertia_air) / 256;
-            if (thing->veloc_base.y.val != 0)
-                thing->veloc_base.y.val = thing->veloc_base.y.val * (256 - thing->inertia_air) / 256;
-            if ((thing->movement_flags & TMvF_Flying) == 0) {
-                thing->veloc_push_add.z.val -= thing->fall_acceleration;
-                thing->state_flags |= TF1_PushAdd;
-            } else
-            {
-                // For flying creatures, the Z velocity should also decrease over time
-                if (thing->veloc_base.z.val != 0)
-                {
-                    thing->veloc_base.z.val = thing->veloc_base.z.val * (256 - thing->inertia_air) / 256;
-                }
-                else
-                {
-                    if (thing_above_flight_altitude(thing) && ((thing->alloc_flags & TAlF_IsControlled) == 0))
-                    {
-                        thing->veloc_push_add.z.val -= thing->fall_acceleration;
-                        thing->state_flags |= TF1_PushAdd;
-                    }
-                }
-            }
-        } else
-        {
-            if (thing->veloc_base.x.val != 0)
-              thing->veloc_base.x.val = thing->veloc_base.x.val * (256 - thing->inertia_floor) / 256;
-            if (thing->veloc_base.y.val != 0)
-              thing->veloc_base.y.val = thing->veloc_base.y.val * (256 - thing->inertia_floor) / 256;
-            thing->mappos.z.val = thing->floor_height;
-            if ((thing->movement_flags & TMvF_ZeroVerticalVelocity) != 0)
-            {
-              thing->veloc_base.z.val = 0;
-            }
-        }
+        apply_thing_drag_and_gravity(thing);
     }
     update_thing_animation(thing);
     update_thing_sound(thing);
@@ -3712,7 +3660,7 @@ TbBool thing_is_shootable(const struct Thing *thing, PlayerNumber shot_owner, Hi
             return ((hit_targets & HitTF_AlliedSoulContainer) != 0);
         }
         if (object_is_growing_food(thing) ||
-           (object_is_mature_food(thing) && !is_thing_directly_controlled(thing) && !is_thing_passenger_controlled(thing)))
+           (object_is_mature_food(thing) && !user_controls_thing(ANY_USER, thing, UCT_Direct | UCT_PossessionEntryZoom) && !user_controls_thing(ANY_USER, thing, UCT_Passenger | UCT_PossessionEntryZoom)))
         {
             return ((hit_targets & HitTF_AnyFoodObjects) != 0);
         }
@@ -4355,7 +4303,7 @@ long switch_owned_objects_on_destoyed_slab_to_neutral(MapSlabCoord slb_x, MapSla
 
 TbBool setup_creature_leave_or_die_if_possible(struct Thing *thing)
 {
-    if (!is_thing_some_way_controlled(thing) && !creature_is_dying(thing))
+    if (!user_controls_thing(ANY_USER, thing, UCT_Selected) && !creature_is_dying(thing))
     {
         if (!creature_is_kept_in_custody_by_enemy(thing) && !creature_is_being_unconscious(thing) && !creature_is_leaving_and_cannot_be_stopped(thing))
         {
@@ -4454,7 +4402,7 @@ unsigned short setup_excess_creatures_to_leave_or_die(short max_remain)
             cleanup_creature_state_and_interactions(thing);
             force_any_creature_dragging_thing_to_drop_it(thing);
 
-            if (is_thing_some_way_controlled(thing) || thing_is_picked_up(thing))
+            if (user_controls_thing(ANY_USER, thing, UCT_Selected) || thing_is_picked_up(thing))
             {
                 kill_creature(thing, INVALID_THING, -1, CrDed_Default);
             }
@@ -4556,7 +4504,7 @@ void break_mapwho_infinite_chain(const struct Map *mapblk)
     WARNLOG("No change performed");
 }
 
-ThingIndex get_index_of_next_creature_of_owner_and_model(struct Thing *current_creature, PlayerNumber owner, ThingModel crmodel, struct PlayerInfo *player)
+ThingIndex get_index_of_next_creature_of_owner_and_model(struct Thing *current_creature, PlayerNumber owner, ThingModel crmodel, NetUserId user)
 {
     unsigned long k = 0;
     ThingIndex i = current_creature->index;
@@ -4578,7 +4526,7 @@ ThingIndex get_index_of_next_creature_of_owner_and_model(struct Thing *current_c
             {
                 if ( (thing->model == crmodel) || (crmodel == 0) )
                 {
-                    if (creature_can_be_queried(player, thing))
+                    if (creature_can_be_queried(user, thing))
                     {
                         return thing->index;
                     }

@@ -31,6 +31,7 @@
 #include "gui_frontmenu.h"
 #include "frontend.h"
 #include "front_input.h"
+#include "frontmenu_ingame_evnt.h"
 #include "thing_objects.h"
 #include "thing_traps.h"
 #include "dungeon_data.h"
@@ -131,9 +132,9 @@ static inline void clear_gui_tooltip_button(void)
     tool_tip_box.gbutton = NULL;
 }
 
-TbBool cursor_moved_to_new_subtile(const struct PlayerInfo *player)
+TbBool cursor_moved_to_new_subtile(NetUserId user)
 {
-    const struct UserState* ustate = get_player_user_state(player);
+    const struct UserState* ustate = get_user_state(user);
     return ((ustate->cursor_subtile_x != ustate->previous_cursor_subtile_x) || (ustate->cursor_subtile_y != ustate->previous_cursor_subtile_y));
 }
 
@@ -145,7 +146,7 @@ TbBool setup_trap_tooltips(struct Coord3d *pos)
     //thing = get_trap_for_slab_position(subtile_slab(pos->x.stl.num),subtile_slab(pos->y.stl.num));
     if (thing_is_invalid(thing)) return false;
     const struct PlayerInfo *player = get_displayed_player();
-    const struct UserState *ustate = get_player_user_state(player);
+    const struct UserState *ustate = get_user_state_prediction(get_displayed_user());
     if ((thing->trap.revealed == 0) && (player->id_number != thing->owner))
         return false;
     update_gui_tooltip_target(thing);
@@ -164,9 +165,8 @@ TbBool setup_object_tooltips(struct Coord3d *pos)
 {
     long i;
     SYNCDBG(18,"Starting");
-    const struct PlayerInfo *player = get_displayed_player();
-    const struct UserState *ustate = get_player_user_state(player);
-    struct Thing* thing = thing_get(ustate->thing_under_hand);
+    const struct UserState *ustate = get_user_state_prediction(get_displayed_user());
+    struct Thing* thing = thing_get(get_user_thing_under_hand(get_displayed_user()));
     if (!thing_is_object(thing))
     {
         thing = get_nearest_object_with_tooltip_at_position(pos->x.stl.num, pos->y.stl.num,0);
@@ -285,12 +285,11 @@ short setup_land_tooltips(struct Coord3d *pos)
   if (string_idx_is_empty(slabst->tooltip_stridx))
     return false;
   update_gui_tooltip_target((void *)(uintptr_t)skind);
-  const struct PlayerInfo *player = get_displayed_player();
-  const struct UserState *ustate = get_player_user_state(player);
-  struct Thing *handthing = thing_get(ustate->thing_under_hand);
+  const struct UserState *ustate = get_user_state_prediction(get_displayed_user());
+  struct Thing *handthing = thing_get(get_user_thing_under_hand(get_displayed_user()));
   TbBool in_query_mode = (ustate->work_state == PSt_CreatrQuery || ustate->work_state == PSt_QueryAll);
   if (in_query_mode == false) {
-      if (cursor_moved_to_new_subtile(player) || thing_exists(handthing)) {
+      if (cursor_moved_to_new_subtile(get_displayed_user()) || thing_exists(handthing)) {
           return false;
       }
       unsigned short delay_time = tool_tip_dbg.land_coord ? 10 : 50;
@@ -321,13 +320,12 @@ short setup_room_tooltips(struct Coord3d *pos)
   if (string_idx_is_empty(stridx))
     return false;
   update_gui_tooltip_target(room);
-  const struct PlayerInfo *player = get_displayed_player();
-  const struct UserState *ustate = get_player_user_state(player);
-  struct Thing *handthing = thing_get(ustate->thing_under_hand);
+  const struct UserState *ustate = get_user_state_prediction(get_displayed_user());
+  struct Thing *handthing = thing_get(get_user_thing_under_hand(get_displayed_user()));
 
   TbBool in_query_mode = (ustate->work_state == PSt_CreatrQuery || ustate->work_state == PSt_QueryAll);
   if (in_query_mode == false) {
-      if (cursor_moved_to_new_subtile(player) || thing_exists(handthing)) {
+      if (cursor_moved_to_new_subtile(get_displayed_user()) || thing_exists(handthing)) {
           return false;
       }
       if (help_tip_time <= 50) {
@@ -418,7 +416,7 @@ TbBool gui_button_tooltip_update(int gbtn_idx)
     return false;
   }
   int tooltip_delay;
-  const struct UserState *ustate = get_player_user_state(get_displayed_player());
+  const struct UserState *ustate = get_user_state_prediction(get_displayed_user());
   struct GuiButton* gbtn = &active_buttons[gbtn_idx];
   if ((get_active_menu(gbtn->gmenu_idx)->visual_state == 2) && ((gbtn->btype_value & LbBFeF_NoTooltip) == 0))
   {
@@ -501,7 +499,7 @@ TbBool input_gameplay_tooltips(TbBool gameplay_on)
             mappos.x.val = watched->pos_x;
             mappos.y.val = watched->pos_y;
         } else {
-            struct Camera *camera = get_local_active_camera(get_my_player());
+            struct Camera *camera = get_local_active_camera();
             if (camera == NULL) {
                 ERRORLOG("No active camera");
                 return false;
@@ -509,7 +507,8 @@ TbBool input_gameplay_tooltips(TbBool gameplay_on)
             valid_position = screen_to_map(camera, GetMouseX(), GetMouseY(), &mappos);
         }
         if (valid_position && subtile_revealed(mappos.x.stl.num, mappos.y.stl.num, player->id_number)) {
-            if (get_local_view_type(player) != PVT_CreatureContrl && get_local_view_type(player) != PVT_CreaturePasngr) {
+            const unsigned char view_type = get_displayed_view_type();
+            if (view_type != PVT_CreatureContrl && view_type != PVT_CreaturePasngr) {
                 shown = setup_scrolling_tooltips(&mappos);
             }
         }
@@ -518,6 +517,21 @@ TbBool input_gameplay_tooltips(TbBool gameplay_on)
         reset_scrolling_tooltip();
     SYNCDBG(19,"Finished");
     return shown;
+}
+
+void update_paused_message_tooltip(void)
+{
+    static TbBool shown = false;
+    if (settings.tooltips_on && mouse_is_over_paused_message()) {
+        if (!shown) {
+            reset_scrolling_tooltip();
+        }
+        set_gui_tooltip_box_fmt(1, "%s", get_string(GUIStr_ClickToUnpause));
+        shown = true;
+    } else if (shown) {
+        clear_flag(tool_tip_box.flags, TTip_Visible);
+        shown = false;
+    }
 }
 
 void toggle_tooltips(void)
@@ -674,10 +688,9 @@ void draw_tooltip_at(long ttpos_x,long ttpos_y,char *tttext)
   long ttwidth = c_ttwidth;
   long ttheight = c_ttheight;
   RendererSetDrawFlags(flg_mem);
-  const struct PlayerInfo *player = get_displayed_player();
   long pos_x = ttpos_x;
   long pos_y = ttpos_y;
-  if (get_local_view_type(player) == PVT_MapScreen)
+  if (get_displayed_view_type() == PVT_MapScreen)
   {
       pos_y = GetMouseY() + scale_ui_value(24);
       if (pos_y > MyScreenHeight - scale_ui_value(104))

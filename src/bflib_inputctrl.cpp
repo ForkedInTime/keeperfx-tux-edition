@@ -474,13 +474,19 @@ static void process_event(const SDL_Event *ev)
         isMouseActive = true;
         isMouseActivated = true;
         LbGrabMouseCheck(MG_OnFocusGained);
-        if (freeze_game_on_focus_lost() && !LbIsFrozenOrPaused())
+        // The volume comes back even while the game is paused, so unpausing later is not
+        // silent. The first focus event can arrive before init_sound(), hence the
+        // GetSoundInstalled() guard (the same one mute_audio() has).
+        if (mute_audio_on_focus_lost() && !SoundDisabled && GetSoundInstalled())
+        {
+            set_music_volume(settings.music_volume);
+            SetSoundMasterVolume(settings.sound_volume);
+        }
+        // Losing focus paused the music if either setting is on (both may be); while the
+        // game stays paused, unpausing resumes it instead.
+        if ((mute_audio_on_focus_lost() || freeze_game_on_focus_lost()) && !LbIsFrozenOrPaused())
         {
             resume_music();
-        }
-        if (mute_audio_on_focus_lost() && !LbIsFrozenOrPaused())
-        {
-            mute_audio(false);
         }
         redetect_screen_refresh_rate_for_draw();
         break;
@@ -704,7 +710,7 @@ void LbGrabMouseInit(void)
 void LbGrabMouseCheck(long grab_event)
 {
     TbBool paused = ((game.operation_flags & GOF_Paused) != 0);
-    TbBool possession_mode = (get_player_view_type(get_my_player()) == PVT_CreatureContrl) && ((game.view_mode_flags & GNFldD_CreaturePasngr) == 0);
+    TbBool possession_mode = (get_user_view_type(get_my_user()) == PVT_CreatureContrl) && ((game.view_mode_flags & GNFldD_CreaturePasngr) == 0);
     TbBool grab_cursor = lbMouseGrabbed;
     // ASSUMPTION: SDL3 auto-suspends/resumes relative mode on focus; grab is driven
     // by game intent only, never forced off by focus loss.

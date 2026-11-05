@@ -29,6 +29,8 @@
 #include "bflib_joyst.h"
 #include "frontmenu_options.h"
 #include "config.h"
+#include "config_compp.h"
+#include "front_network.h"
 #include "front_input.h"
 #include "engine_camera.h"
 #include "game_merge.h"
@@ -44,6 +46,8 @@ extern "C" {
 unsigned char i_can_see_levels[] = {30, 45, 60, 254,};
 struct GameSettings settings;
 static struct GameSettings settings_saved;
+static struct ConfigInfo net_config_saved;
+static struct ConfigInfo skirmish_config_saved;
 /******************************************************************************/
 
 static const struct { unsigned char code; const char *name; } keycode_table[] = {
@@ -358,6 +362,21 @@ static TbControllerButtons name_to_controller_buttons(const char *name)
     return buttons;
 }
 
+static void escape_toml_string(char *dst, size_t dst_size, const char *src)
+{
+    size_t len = 0;
+    for (; *src != '\0' && len + 2 < dst_size; src++) {
+        if ((unsigned char)*src < ' ' || *src == 0x7F) {
+            continue;
+        }
+        if (*src == '"' || *src == '\\') {
+            dst[len++] = '\\';
+        }
+        dst[len++] = *src;
+    }
+    dst[len] = '\0';
+}
+
 #ifdef __cplusplus
 }
 #endif
@@ -384,6 +403,10 @@ void setup_default_settings(void)
     settings.mentor_volume                 = 127;
     settings.isometric_tilt                = CAMERA_TILT_DEFAULT;
     settings.highlight_mode                = false;
+    settings.computer_assistant_kind       = DEFAULT_COMPUTER_ASSIST;
+    settings.reconnect_token               = 0;
+    net_config_info                        = default_net_config_info;
+    skirmish_config_info                   = default_skirmish_config_info;
 
     for (int i = 0; i < GAME_KEYS_COUNT; i++)
     {
@@ -404,6 +427,8 @@ TbBool load_settings(void)
     {
         save_settings();
         settings_saved = settings;
+        net_config_saved = net_config_info;
+        skirmish_config_saved = skirmish_config_info;
         return false;
     }
 
@@ -472,6 +497,8 @@ TbBool load_settings(void)
         if (val && value_type(val) == VALUE_INT32) settings.first_person_move_invert = (unsigned char)value_int32(val);
         val = value_dict_get(vsec, "first_person_move_sensitivity");
         if (val && value_type(val) == VALUE_INT32) settings.first_person_move_sensitivity = (unsigned char)value_int32(val);
+        val = value_dict_get(vsec, "computer_assistant_kind");
+        if (val && value_type(val) == VALUE_INT32) settings.computer_assistant_kind = (uint8_t)clamp(value_int32(val), 0, COMPUTER_ASSIST_TYPES_COUNT);
     }
 
     /* [keys] */
@@ -501,6 +528,36 @@ TbBool load_settings(void)
         }
     }
 
+    /* [network] */
+    vsec = value_dict_get(&root, "network");
+    if (vsec)
+    {
+        val = value_dict_get(vsec, "player_name");
+        if (val && value_type(val) == VALUE_STRING) snprintf(net_config_info.net_player_name, sizeof(net_config_info.net_player_name), "%s", value_string(val));
+        val = value_dict_get(vsec, "lobby_name");
+        if (val && value_type(val) == VALUE_STRING) snprintf(net_config_info.net_lobby_name, sizeof(net_config_info.net_lobby_name), "%s", value_string(val));
+        val = value_dict_get(vsec, "max_players");
+        if (val && value_type(val) == VALUE_INT32) net_config_info.max_players = (uint8_t)clamp(value_int32(val), MIN_NET_USERS, MAX_NET_USERS);
+        val = value_dict_get(vsec, "spectators_enabled");
+        if (val) net_config_info.spectators_enabled = value_coerce_bool(val);
+        val = value_dict_get(vsec, "spectator_chat");
+        if (val) net_config_info.spectator_chat = value_coerce_bool(val);
+        val = value_dict_get(vsec, "computer_players");
+        if (val) net_config_info.computer_players = value_coerce_bool(val);
+        val = value_dict_get(vsec, "cheats_enabled");
+        if (val) net_config_info.cheats_enabled = value_coerce_bool(val);
+        val = value_dict_get(vsec, "computer_assistant");
+        if (val) net_config_info.computer_assistant = value_coerce_bool(val);
+        val = value_dict_get(vsec, "reconnect_token");
+        if (val && value_type(val) == VALUE_STRING) settings.reconnect_token = strtoull(value_string(val), NULL, 16);
+    }
+
+    vsec = value_dict_get(&root, "skirmish");
+    if (vsec) {
+        val = value_dict_get(vsec, "max_players");
+        if (val && value_type(val) == VALUE_INT32) skirmish_config_info.max_players = (uint8_t)clamp(value_int32(val), MIN_NET_USERS, MAX_NET_USERS);
+    }
+
     value_fini(&root);
 
     // sanity checks
@@ -518,12 +575,15 @@ TbBool load_settings(void)
     settings.isometric_tilt = clamp(settings.isometric_tilt, CAMERA_TILT_MIN, CAMERA_TILT_MAX);
     settings.highlight_mode = clamp(settings.highlight_mode, false, true);
     settings_saved = settings;
+    net_config_saved = net_config_info;
+    skirmish_config_saved = skirmish_config_info;
     return true;
 }
 
 short save_settings(void)
 {
-    if (memcmp(&settings, &settings_saved, sizeof(settings)) == 0)
+    if (memcmp(&settings, &settings_saved, sizeof(settings)) == 0 && memcmp(&net_config_info, &net_config_saved, sizeof(net_config_info)) == 0
+     && memcmp(&skirmish_config_info, &skirmish_config_saved, sizeof(skirmish_config_info)) == 0)
         return true;
 
     char *fname = prepare_file_path(FGrp_Save, "settings.toml");
@@ -560,6 +620,7 @@ short save_settings(void)
     TOSAVE("\n[gameplay]\n");
     TOSAVE("first_person_move_invert = %d\n", (int)settings.first_person_move_invert);
     TOSAVE("first_person_move_sensitivity = %d\n", (int)settings.first_person_move_sensitivity);
+    TOSAVE("computer_assistant_kind = %d\n", (int)settings.computer_assistant_kind);
     TOSAVE("\n[keys]\n");
     for (int i = 0; i < GAME_KEYS_COUNT; i++)
     {
@@ -573,11 +634,29 @@ short save_settings(void)
             mods_buf,
             controller_buttons_buf);
     }
+    char player_name[2 * sizeof(net_config_info.net_player_name)];
+    char lobby_name[2 * sizeof(net_config_info.net_lobby_name)];
+    escape_toml_string(player_name, sizeof(player_name), net_config_info.net_player_name);
+    escape_toml_string(lobby_name, sizeof(lobby_name), net_config_info.net_lobby_name);
+    TOSAVE("\n[network]\n");
+    TOSAVE("player_name = \"%s\"\n", player_name);
+    TOSAVE("lobby_name = \"%s\"\n", lobby_name);
+    TOSAVE("max_players = %d\n", (int)net_config_info.max_players);
+    TOSAVE("spectators_enabled = %d\n", (int)net_config_info.spectators_enabled);
+    TOSAVE("spectator_chat = %d\n", (int)net_config_info.spectator_chat);
+    TOSAVE("computer_players = %d\n", (int)net_config_info.computer_players);
+    TOSAVE("cheats_enabled = %d\n", (int)net_config_info.cheats_enabled);
+    TOSAVE("computer_assistant = %d\n", (int)net_config_info.computer_assistant);
+    TOSAVE("reconnect_token = \"%016llx\"\n", (unsigned long long)settings.reconnect_token);
+    TOSAVE("\n[skirmish]\n");
+    TOSAVE("max_players = %d\n", (int)skirmish_config_info.max_players);
 #undef TOSAVE
 
     LbFileSaveAt(fname, buf, len);
     free(buf);
     settings_saved = settings;
+    net_config_saved = net_config_info;
+    skirmish_config_saved = skirmish_config_info;
     return true;
 }
 

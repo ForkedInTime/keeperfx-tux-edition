@@ -61,6 +61,10 @@ public:
     /** Whole-file storage backend for saves and other small data files. The default wraps LbFile*. */
     virtual IFileSystem* GetFileSystem();
 
+    /** Size of the shared scratch allocation (bytes). Platforms with tight
+     *  RAM budgets (e.g. consoles) can return a smaller value. */
+    virtual size_t GetScratchSize() const { return kScratchMemorySize; }
+
     /** Adjust a desktop-fullscreen window so the OS compositor keeps compositing
      *  it, rather than letting the driver present it straight to the display. */
     virtual void KeepFullscreenWindowComposited(SDL_Window* /*window*/) {}
@@ -92,6 +96,9 @@ public:
      *  with a raw move would look like it worked and then never restore correctly;
      *  better to leave the seam unimplemented than ship that. */
     virtual TbBool TrashFile(const char* abs_path) = 0;
+
+private:
+    static constexpr size_t kScratchMemorySize = 4 * 1024 * 1024;
 };
 
 /** The platform implementation selected for this build target. */
