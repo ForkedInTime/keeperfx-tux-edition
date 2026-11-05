@@ -62,7 +62,8 @@ Started as an `.AppImage` file, it also adds itself to your applications menu
 that entry starts it with the same folder. A game manager such as Lutris that keeps its own shortcut can
 set `KFX_NO_DESKTOP_ENTRY=1` to skip ours. Outside the game's folder there is then only a lock file in
 `/tmp` (one launcher at a time), downloads in `/tmp` while an update installs, and the Workshop
-browser's catalogue cache in `~/.cache` once you open it.
+browser's catalogue cache in `~/.cache` once you open it (and, as for any game, the graphics driver's
+shader cache there).
 
 A newer AppImage updates the folder on its first start and keeps your `keeperfx.cfg`. Settings the new
 release adds are filled in from its own copy, `_keeperfx.cfg`, the same way an update from inside the
