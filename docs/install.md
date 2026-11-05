@@ -45,6 +45,30 @@ without it — a container, a locked-down kernel — run it without mounting ins
 
 That's the AppImage *runtime*, not our app — everything our game needs is already bundled.
 
+### Keep the game in another folder (Lutris, another drive)
+
+On its first start the AppImage copies the game into `~/.local/share/keeperfx-alpha` and runs it from
+there. To use another folder, set `KFX_ALPHA_PREFIX` every time you start it:
+
+```bash
+KFX_ALPHA_PREFIX="$HOME/Games/keeperfx" ./KeeperFX-Tux-Edition-x86_64.AppImage
+```
+
+Everything the game keeps is then in that folder: `keeperfx.cfg` and `keeperfx-launcher-qt.cfg` (the
+game's and the launcher's settings), saves, logs, screenshots, mods and Workshop maps.
+
+Started as an `.AppImage` file, it also adds itself to your applications menu
+(`~/.local/share/applications/keeperfx-linux-alpha.desktop`, with an icon in `~/.local/share/icons`), and
+that entry starts it with the same folder. A game manager such as Lutris that keeps its own shortcut can
+set `KFX_NO_DESKTOP_ENTRY=1` to skip ours. Outside the game's folder there is then only a lock file in
+`/tmp` (one launcher at a time), downloads in `/tmp` while an update installs, and the Workshop
+browser's catalogue cache in `~/.cache` once you open it.
+
+A newer AppImage updates the folder on its first start and keeps your `keeperfx.cfg`. Settings the new
+release adds are filled in from its own copy, `_keeperfx.cfg`, the same way an update from inside the
+launcher does it. (Up to 1.4.0.6088 a newer AppImage put `keeperfx.cfg` back to the defaults, and a
+relative `KFX_ALPHA_PREFIX` did not start.)
+
 ## 🏛 Arch Linux — install from the AUR
 
 **Arch, CachyOS, EndeavourOS, Manjaro:** there's a proper package —
