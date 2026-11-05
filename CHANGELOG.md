@@ -4,6 +4,28 @@ This tracks the changes in *this* fork on top of the KeeperFX team's `master`.
 Version numbers follow the engine build (`<major>.<minor>.<release>.<build>`), with
 `alpha` appended on the alpha channel and nothing appended on the stable one.
 
+## 1.4.0.6088 — 2026-11-05 — stable
+
+**Replaces 1.4.0.6078.** The 1.4.0.6087 alpha, unchanged, as the stable release (details in its entry below):
+
+- **The frame cap follows any monitor and no longer halves the frame rate by mistake.** It judges a frame by
+  its own work, ignores the frames right after a load or a pause, steps down only when at least half the frames
+  are late, and tries the faster rate again. On 1.4.0.6078 a player's afternoon on a 160 Hz monitor stepped
+  down to 80 three times; on 1.4.0.6087 the same player's evening on the same level kept its cap throughout.
+- **Variable refresh (FreeSync, G-Sync, VESA Adaptive-Sync).** The cap sits just under the top rate (157 on
+  160 Hz) and never steps down. `VARIABLE_REFRESH=AUTO` (the default) asks the desktop; `ON`/`OFF` decide it,
+  and the launcher's Graphics tab has the same choice. A `keeperfx.cfg` without the line counts as `AUTO`.
+- **Full sharpness on a scaled desktop:** with the desktop scaled (measured at 125%) the game draws at the
+  monitor's real resolution, instead of a smaller picture the desktop stretches.
+- **Lua: `Map.default_texture`** keeps the texture a script set across a save and load.
+- **Launcher:** the Variable refresh choice; the frame cap's fallback no longer stops at 200 Hz.
+
+Saves are unchanged: same format as 1.4.0.6078 and 1.4.0.6072, and saves from both loaded in a player's
+session on this code. Checked on 1.4.0.6087, beyond its entry: every campaign's first level under
+AddressSanitizer and UndefinedBehaviorSanitizer (16/16, no memory errors, nothing in the changed code), the
+AppImage on Ubuntu 24.04, Debian 13 and Fedora 41 (no missing libraries, the launcher starts, level 1 runs on
+OpenGL), and an evening of play at 160 Hz with variable refresh detected (no crash, no new warnings).
+
 ## 1.4.0.6087 — 2026-11-04 — alpha
 
 On top of stable 1.4.0.6078: frame pacing for any monitor, variable refresh, full sharpness on a scaled

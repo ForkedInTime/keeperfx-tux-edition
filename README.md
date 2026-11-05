@@ -63,7 +63,7 @@ The download above is **stable**: it only moves once a build has been played and
 launcher's Settings dialog has a release-channel setting, and it only ever offers you releases from the
 channel you picked. The AUR package and the Flatpak follow stable. Not sure? Stay on stable.
 
-**Stable is 1.4.0.6078 (4 November 2026).** The badges above track both channels live.
+**Stable is 1.4.0.6088 (5 November 2026).** The badges above track both channels live.
 
 ## ❓ Help
 
@@ -95,7 +95,7 @@ build; this edition is the Linux half they don't ship, plus the bugs found on th
 - 🧰 **Launcher** — Workshop browser, Mod Manager, and a built-in updater with separate stable and alpha
   channels.
 
-467 commits on top of the team's `master`. **[Everything, item by item »](docs/whats-different.md)**
+468 commits on top of the team's `master`. **[Everything, item by item »](docs/whats-different.md)**
 
 ## Credit
 
