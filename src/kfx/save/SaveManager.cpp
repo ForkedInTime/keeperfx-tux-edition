@@ -208,8 +208,8 @@ static TbBool apply_game_kfxs(const char *fname, struct LoadedSave *loaded_save,
     *centry = loaded_save->centry;
     // Config loading reads the level numbers, and writes into parts of game (slab sets, research, ...)
     // that the save replaces afterwards, so the save goes in only after it.
-    game.loaded_level_number = loaded_save->game->loaded_level_number;
-    game.selected_level_number = loaded_save->game->selected_level_number;
+    game.loaded_level_number = centry->level_num;
+    game.selected_level_number = centry->level_num;
     if (!change_campaign(CampgnT_Default, centry->campaign_fname))
     {
         SAVEERR("can't load campaign \"%s\" for \"%s\"", centry->campaign_fname, fname);
@@ -230,6 +230,11 @@ static TbBool apply_game_kfxs(const char *fname, struct LoadedSave *loaded_save,
     save_copy_runtime(&save_desc_Game, loaded_save->game.get(), &game);
     memcpy(&game, loaded_save->game.get(), sizeof(game));
     memcpy(&intralvl, loaded_save->ilvl.get(), sizeof(intralvl));
+    if (!set_custom_intralevel_data(read_result->custom_ilvl_data, read_result->custom_ilvl_len))
+    {
+        SAVEERR("out of memory loading the custom intralevel data of \"%s\"", fname);
+        return false;
+    }
     // Apply the save's config changes on top of the fresh config.
     if (save_config_overlay_apply(read_result->conf_data, read_result->conf_len, &game.conf, &err) != SVR_Ok)
     {
@@ -239,7 +244,8 @@ static TbBool apply_game_kfxs(const char *fname, struct LoadedSave *loaded_save,
     // Refuses if a used index no longer names the same config entry in this build.
     if (save_names_check(read_result->nams_data, read_result->nams_len, &game, &err) != SVR_Ok)
     {
-        SAVEWARN("\"%s\" refused: %s", fname, err.message);
+        SAVEWARN("\"%s\" refused: %s (level %d of campaign \"%s\")", fname, err.message,
+            (int)centry->level_num, centry->campaign_fname);
         return false;
     }
     if (read_result->lua_len > 0)
@@ -334,13 +340,11 @@ enum SaveLoadOutcome SaveManager::Load(int slot_num, enum SaveCheckResult *why)
     close_instance_cheat_menu();
     close_secondary_cheat_menu();
     output_message(SMsg_GameLoaded, 0);
-    panel_map_update(0, 0, game.map_subtiles_x+1, game.map_subtiles_y+1);
     calculate_moon_phase(false,false);
     update_extra_levels_visibility();
     struct PlayerInfo* player = get_my_player();
-    struct UserState* ustate = get_user_state(get_local_user());
-    clear_flag(ustate->additional_flags, UsrAF_LightningPaletteIsActive);
-    clear_flag(ustate->additional_flags, UsrAF_FreezePaletteIsActive);
+    local_state.lightning_palette_active = false;
+    local_state.freeze_palette_active = false;
     local_state.view_type = PVT_None;
     local_state.show_panel = true;
     local_state.palette_fade_step_pain = 0;
@@ -349,10 +353,7 @@ enum SaveLoadOutcome SaveManager::Load(int slot_num, enum SaveCheckResult *why)
     local_state.minimap_pos_x = 11;
     local_state.minimap_pos_y = 11;
     local_state.roomspace_size = DEFAULT_USER_ROOMSPACE_WIDTH;
-    // Reinitialize lens first (restores lens_palette pointer from config)
-    reinitialise_eye_lens(game.applied_lens_type);
-    // Apply the appropriate palette (lens palette if active, otherwise engine default)
-    PaletteSetUserPalette(get_local_user(), local_state.lens_palette ? local_state.lens_palette : engine_palette);
+    PaletteSetUserPalette(get_local_user(), engine_palette);
     apply_local_user_preferences(get_local_user(), UPF_ApplyOnLoad);
     init_local_cameras(player);
     // Update the lights system state
@@ -375,16 +376,6 @@ enum SaveLoadOutcome SaveManager::Load(int slot_num, enum SaveCheckResult *why)
 }
 
 /******************************************************************************/
-
-enum SaveResult SaveManager::ReadNetConfig(const char *fname, ConfigInfo *config, SaveError *err)
-{
-    return savefile::ReadRecord(Fs(), fname, *config, err);
-}
-
-bool SaveManager::WriteNetConfig(const char *fname, const ConfigInfo *config)
-{
-    return savefile::WriteRecord(Fs(), fname, *config);
-}
 
 enum SaveResult SaveManager::ReadHighScores(const char *fname, HighScore **table, uint32_t *count, SaveError *err)
 {
@@ -443,16 +434,6 @@ int SaveManager_ResumeCampaign(const char *campaign_fname) { return GetSaveManag
 int SaveManager_CampaignHasProgress(const struct GameCampaign *campgn) { return GetSaveManager().CampaignHasProgress(campgn); }
 void SaveManager_UpdateCampaignPercents(struct CampaignsList *clist) { GetSaveManager().UpdateCampaignPercents(clist); }
 void SaveManager_DeleteContinueLink(void) { GetSaveManager().DeleteContinueLink(); }
-
-enum SaveResult SaveManager_ReadNetConfig(const char *fname, struct ConfigInfo *config, struct SaveError *err)
-{
-    return GetSaveManager().ReadNetConfig(fname, config, err);
-}
-
-int SaveManager_WriteNetConfig(const char *fname, const struct ConfigInfo *config)
-{
-    return GetSaveManager().WriteNetConfig(fname, config);
-}
 
 enum SaveResult SaveManager_ReadHighScores(const char *fname, struct HighScore **table, uint32_t *count,
     struct SaveError *err)

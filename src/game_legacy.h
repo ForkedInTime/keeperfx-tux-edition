@@ -170,17 +170,12 @@ struct LogThingDesyncInfo {
     TbBigChecksum checksum;
 };
 
-struct LogPlayerDesyncInfo {
-    PlayerNumber id;
-    unsigned char instance_num;
-    uint32_t instance_remain_turns;
-    TbBigChecksum checksum;
-};
-
 struct LogUserDesyncInfo {
     NetUserId user;
     PlayerNumber player_id;
     struct Coord3d mappos;
+    unsigned char instance_num;
+    uint32_t instance_remain_turns;
     TbBigChecksum checksum;
 };
 
@@ -204,7 +199,6 @@ struct DesyncChecksums {
     TbBigChecksum effect_gens;
     TbBigChecksum doors;
     TbBigChecksum rooms;
-    TbBigChecksum players;
     TbBigChecksum dig_tasks;
     TbBigChecksum users;
     TbBigChecksum action_seed;
@@ -216,8 +210,6 @@ struct DesyncChecksums {
 struct LogDetailedSnapshot {
     struct LogThingDesyncInfo things[SYNCED_THINGS_COUNT];
     int thing_count;
-    struct LogPlayerDesyncInfo players[PLAYERS_COUNT];
-    int player_count;
     struct LogUserDesyncInfo users[MAX_NET_USERS];
     int user_count;
     struct LogRoomDesyncInfo rooms[ROOMS_COUNT];
@@ -240,8 +232,6 @@ struct Game {
     char music_fname[DISKPATH_SIZE]; // custom music file to resume after load
     int8_t save_game_slot;
     LevelNumber selected_level_number;
-    int8_t active_lens_type;
-    unsigned char applied_lens_type;
     struct PlayerInfo players[PLAYERS_COUNT];
     struct UserState user_states[MAX_NET_USERS];
     struct Column columns_data[COLUMNS_COUNT];
@@ -334,10 +324,6 @@ struct Game {
     GameTurn armageddon_over_turn;
     PlayerNumber armageddon_caster_idx;
     int8_t active_panel_mnu_idx; /**< The MenuID of currently active panel menu, or 0 if none. */
-    int8_t comp_player_aggressive;
-    int8_t comp_player_defensive;
-    int8_t comp_player_construct;
-    int8_t comp_player_creatrsonly;
     /** Imprisonment tendency variable. Used for GUI only; the real tendency is a flag inside Dungeon. */
     TbBool creatures_tend_imprison;
     /** Flee tendency variable. Used for GUI only; the real tendency is a flag inside Dungeon. */

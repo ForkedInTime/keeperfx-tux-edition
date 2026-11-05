@@ -87,19 +87,19 @@ void set_chosen_power_none(void)
     game.chosen_spell_tooltip = 0;
 }
 
-unsigned char general_expand_check(const struct PlayerInfo *player)
+unsigned char general_expand_check(PlayerNumber plyr_idx, const struct UserState *ustate)
 {
-    return (player->cast_expand_level != 0);
+    return ustate->cast_expand_level != 0;
 }
 
-unsigned char sight_of_evil_expand_check(const struct PlayerInfo *player)
+unsigned char sight_of_evil_expand_check(PlayerNumber plyr_idx, const struct UserState *ustate)
 {
-    return (player->cast_expand_level != 0) && (!player_uses_power_sight(player->id_number));
+    return ustate->cast_expand_level != 0 && !player_uses_power_sight(plyr_idx);
 }
 
-unsigned char call_to_arms_expand_check(const struct PlayerInfo *player)
+unsigned char call_to_arms_expand_check(PlayerNumber plyr_idx, const struct UserState *ustate)
 {
-    return (player->cast_expand_level != 0) && (!player_uses_power_call_to_arms(player->id_number));
+    return ustate->cast_expand_level != 0 && !player_uses_power_call_to_arms(plyr_idx);
 }
 
 void process_armageddon(void)
@@ -249,14 +249,12 @@ void process_disease(struct Thing *creatng)
 
 void lightning_modify_palette(struct Thing *thing)
 {
-    struct PlayerInfo* myplyr = get_my_player();
-    struct UserState* ustate = get_user_state(get_local_user());
-    struct Camera* camera = get_local_active_camera(myplyr);
+    struct Camera* camera = get_local_active_camera();
 
     if (thing->health == 0)
     {
       PaletteSetUserPalette(get_local_user(), engine_palette);
-      ustate->additional_flags &= ~UsrAF_LightningPaletteIsActive;
+      local_state.lightning_palette_active = false;
       return;
     }
     if (camera == NULL)
@@ -266,24 +264,24 @@ void lightning_modify_palette(struct Thing *thing)
     }
     if (((thing->health % 8) != 7) && (thing->health != 1) && (UNSYNC_RANDOM(4) != 0))
     {
-        if ((ustate->additional_flags & UsrAF_LightningPaletteIsActive) != 0)
+        if (local_state.lightning_palette_active)
         {
             if (get_chessboard_distance(&camera->mappos, &thing->mappos) < 11520)
             {
                 PaletteSetUserPalette(get_local_user(), engine_palette);
-                ustate->additional_flags &= ~UsrAF_LightningPaletteIsActive;
+                local_state.lightning_palette_active = false;
             }
         }
         return;
     }
-    if (get_local_view_type(myplyr) != PVT_MapScreen)
+    if (get_local_view_type() != PVT_MapScreen)
     {
-        if ((ustate->additional_flags & UsrAF_LightningPaletteIsActive) == 0)
+        if (!local_state.lightning_palette_active)
         {
                         if (get_chessboard_distance(&camera->mappos, &thing->mappos) < 11520)
             {
               PaletteSetUserPalette(get_local_user(), lightning_palette);
-              ustate->additional_flags |= UsrAF_LightningPaletteIsActive;
+              local_state.lightning_palette_active = true;
             }
         }
     }
@@ -386,8 +384,7 @@ void god_lightning_choose_next_creature(struct Thing *shotng)
 
 void draw_god_lightning(struct Thing *shotng)
 {
-    struct PlayerInfo* player = get_player(shotng->owner);
-    const struct Camera* cam = get_local_active_camera(player);
+    const struct Camera* cam = get_local_active_camera();
     if (cam == NULL) {
         return;
     }

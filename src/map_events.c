@@ -193,15 +193,14 @@ void event_initialise_all(void)
     }
 }
 
-long event_move_player_towards_event(struct PlayerInfo *player, long event_idx)
+TbBool event_move_user_towards_event(NetUserId user, EventIndex event_idx)
 {
     struct Event* event = &game.event[event_idx];
-
-    player->zoom_to_pos_x = event->mappos_x;
-    player->zoom_to_pos_y = event->mappos_y;
-
-    set_player_instance(player, PI_ZoomToPos, 0);
-    return 1;
+    struct UserState *ustate = get_user_state(user);
+    ustate->zoom_to_pos_x = event->mappos_x;
+    ustate->zoom_to_pos_y = event->mappos_y;
+    set_user_instance(user, PI_ZoomToPos, 0);
+    return true;
 }
 
 struct Event *event_create_event(MapCoord map_x, MapCoord map_y, EventKind evkind, unsigned char dngn_id, int32_t target)
@@ -350,8 +349,7 @@ void event_add_to_event_buttons_list_or_replace_button(struct Event *event, stru
             evidx = dungeon->event_button_index[i];
             if (evidx == 0) {
                 if (is_my_player_number(dungeon->owner)) {
-                    struct PlayerInfo* player = get_player(dungeon->owner);
-                    if ( (get_gameturn() > 10) && (get_player_view_type(player) != PVT_DungeonTop || local_state.show_gui) )
+                    if ( (get_gameturn() > 10) && (get_user_view_type(get_displayed_user()) != PVT_DungeonTop || local_state.show_gui) )
                     {
                         play_non_3d_sample(snd_tab_fall);
                     }
@@ -711,7 +709,7 @@ void event_process_events(void)
             continue;
         }
         struct PlayerInfo*player = get_player(event->owner);
-        if (get_player_view_type(player) <= PVT_DungeonTop) //Freeze lifespan of events of human player on map or possession
+        if (get_user_view_type(get_player_primary_user(player)) <= PVT_DungeonTop) //Freeze lifespan of events of human player on map or possession
         {
             if (event->lifespan_turns > 0) {
                 event->lifespan_turns--;

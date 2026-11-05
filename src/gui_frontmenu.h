@@ -70,13 +70,12 @@ enum GUI_Menus {
   GMnu_FELEVEL_SELECT     = 40,
   GMnu_FECAMPAIGN_SELECT  = 41,
   GMnu_FEERROR_BOX        = 42,
-  GMnu_FEADD_SESSION      = 43,
   GMnu_MAPPACK_SELECT     = 44,
   GMnu_MSG_BOX            = 45,
   GMnu_SPELL2             = 46,
   GMnu_ROOM2              = 47,
   GMnu_TRAP2              = 48,
-  GMnu_MP_MAPPACK_SELECT  = 49,
+  GMnu_SKIRMISH_LOBBY     = 49,
 };
 
 #define MENU_INVALID_ID -1
@@ -122,6 +121,7 @@ void set_menu_mode(long mnu_idx);
 void set_menu_visible_on(MenuID menu_id);
 void set_menu_visible_off(MenuID menu_id);
 void turn_off_event_box_if_necessary(PlayerNumber plyr_idx, unsigned char event_idx);
+void turn_off_event_box_if_stale(void);
 
 void kill_menu(struct GuiMenu *gmnu);
 void remove_from_menu_stack(short mnu_id);

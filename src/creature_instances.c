@@ -277,6 +277,22 @@ TbBool instance_draws_possession_swipe(CrInstance inum)
     return ((inst_inf->instance_property_flags & InstPF_UsesSwipe) != 0);
 }
 
+TbBool instance_action_starts_cooldown(CrInstance inum)
+{
+    struct InstanceInfo* inst_inf = creature_instance_info_get(inum);
+    const Creature_Instf_Func func = creature_instances_func_list[inst_inf->func_idx];
+    return (func == instf_creature_fire_shot) || (func == instf_creature_cast_spell);
+}
+
+ThingModel get_instance_shot_model(CrInstance inum)
+{
+    struct InstanceInfo* inst_inf = creature_instance_info_get(inum);
+    if (creature_instances_func_list[inst_inf->func_idx] != instf_creature_fire_shot) {
+        return 0;
+    }
+    return inst_inf->func_params[0];
+}
+
 TbBool instance_is_ranged_weapon(CrInstance inum)
 {
     struct InstanceInfo* inst_inf = creature_instance_info_get(inum);
@@ -711,8 +727,7 @@ long instf_destroy(struct Thing *creatng, int32_t *param)
     struct SlabMap* slb = get_slabmap_block(slb_x, slb_y);
     struct Room* room = room_get(slb->room_index);
     long prev_owner = slabmap_owner(slb);
-    struct PlayerInfo* player;
-    player = get_my_player();
+    const unsigned char my_view_type = get_user_view_type(get_my_user());
     int volume = 32;
 
     if ( !room_is_invalid(room) && (prev_owner != creatng->owner) )
@@ -720,7 +735,7 @@ long instf_destroy(struct Thing *creatng, int32_t *param)
         if (room->health > 1)
         {
             room->health--;
-            if ((get_player_view_type(player) == PVT_CreatureContrl) || (get_player_view_type(player) == PVT_CreaturePasngr))
+            if (my_view_type == PVT_CreatureContrl || my_view_type == PVT_CreaturePasngr)
             {
                 volume = FULL_LOUDNESS;
             }
@@ -746,7 +761,7 @@ long instf_destroy(struct Thing *creatng, int32_t *param)
     if (slb->health > 1)
     {
         slb->health--;
-        if ((get_player_view_type(player) == PVT_CreatureContrl) || (get_player_view_type(player) == PVT_CreaturePasngr))
+        if (my_view_type == PVT_CreatureContrl || my_view_type == PVT_CreaturePasngr)
         {
             volume = FULL_LOUDNESS;
         }
@@ -757,7 +772,7 @@ long instf_destroy(struct Thing *creatng, int32_t *param)
         struct Dungeon* prev_dungeon = get_dungeon(prev_owner);
         prev_dungeon->lvstats.territory_lost++;
     }
-    if ((get_player_view_type(player) == PVT_CreatureContrl) || (get_player_view_type(player) == PVT_CreaturePasngr))
+    if (my_view_type == PVT_CreatureContrl || my_view_type == PVT_CreaturePasngr)
     {
         volume = FULL_LOUDNESS;
     }
@@ -868,8 +883,11 @@ long instf_eat(struct Thing *creatng, int32_t *param)
 long instf_first_person_do_imp_task(struct Thing *creatng, int32_t *param)
 {
     struct CreatureControl* cctrl = creature_control_get_from_thing(creatng);
-    struct PlayerInfo* player = get_player(get_appropriate_player_for_creature(creatng));
-    struct UserState* ustate = get_player_user_state(player);
+    const NetUserId user = get_user_controlling_thing(creatng, UCT_Direct | UCT_Other);
+    if (user < 0)
+        return 0;
+    struct PlayerInfo* player = get_user_player(user);
+    struct UserState* ustate = get_user_state(user);
     TRACE_THING(creatng);
     struct SlabMap* slb;
     MapSubtlCoord ahead_stl_x = creatng->mappos.x.stl.num;
@@ -1065,10 +1083,9 @@ long instf_reinforce(struct Thing *creatng, int32_t *param)
         cctrl->digger.consecutive_reinforcements++;
         if (!S3DEmitterIsPlayingSample(creatng->snd_emitter_id, 63))
         {
-            struct PlayerInfo* player;
-            player = get_my_player();
+            const unsigned char my_view_type = get_user_view_type(get_my_user());
             int volume = 32;
-            if ((get_player_view_type(player) == PVT_CreatureContrl) || (get_player_view_type(player) == PVT_CreaturePasngr))
+            if (my_view_type == PVT_CreatureContrl || my_view_type == PVT_CreaturePasngr)
             {
                 volume = FULL_LOUDNESS;
             }

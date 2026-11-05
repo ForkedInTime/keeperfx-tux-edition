@@ -443,17 +443,11 @@ TbBool placing_offmap_workshop_item(PlayerNumber plyr_idx, ThingClass tngclass, 
     switch (tngclass)
     {
     case TCls_Trap:
-        if (dungeon->mnfct_info.trap_amount_stored[tngmodel] > 0) {
-            return false;
-        }
         if (dungeon->mnfct_info.trap_amount_offmap[tngmodel] > 0) {
             return true;
         }
         break;
     case TCls_Door:
-        if (dungeon->mnfct_info.door_amount_stored[tngmodel] > 0) {
-            return false;
-        }
         if (dungeon->mnfct_info.door_amount_offmap[tngmodel] > 0) {
             return true;
         }
@@ -691,7 +685,7 @@ void update_manufacturing(void)
 EventIndex update_workshop_object_pickup_event(struct Thing *creatng, struct Thing *picktng)
 {
     EventIndex evidx;
-    struct PlayerInfo* player;
+    const struct UserState* ustate;
     ThingClass tngclass = crate_thing_to_workshop_item_class(picktng);
     if (tngclass == TCls_Trap)
     {
@@ -703,8 +697,8 @@ EventIndex update_workshop_object_pickup_event(struct Thing *creatng, struct Thi
             } else if ( (is_my_player_number(creatng->owner)) && (!is_my_player_number(picktng->owner)) ) {
                 if (picktng->owner != game.neutral_player_num)
                 {
-                    player = get_my_player();
-                    if (creatng->index != player->influenced_thing_idx)
+                    ustate = get_local_user_state();
+                    if (creatng->index != ustate->influenced_thing_idx)
                     {
                         output_message(SMsg_TrapTaken, 0);
                     }
@@ -720,8 +714,8 @@ EventIndex update_workshop_object_pickup_event(struct Thing *creatng, struct Thi
             } else if ( (is_my_player_number(creatng->owner)) && (!is_my_player_number(picktng->owner)) ) {
                 if (picktng->owner != game.neutral_player_num)
                 {
-                    player = get_my_player();
-                    if (creatng->index != player->influenced_thing_idx)
+                    ustate = get_local_user_state();
+                    if (creatng->index != ustate->influenced_thing_idx)
                     {
                         output_message(SMsg_DoorTaken, 0);
                     }

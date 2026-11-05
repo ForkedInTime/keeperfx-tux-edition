@@ -33,6 +33,7 @@
 #include "player_computer.h"
 #include "engine_camera.h"
 #include "local_camera.h"
+#include "local_possession.h"
 #include "engine_textures.h"
 #include "thing_stats.h"
 #include "thing_creature.h"
@@ -270,6 +271,7 @@ static void process_dungeons(void)
   SYNCDBG(7,"Starting");
   check_players_lost();
   resolve_placeholders();
+  hand_waiting_placeholders_to_ai();
   process_dungeon_power_magic();
   process_dungeon_devastation_effects();
   process_entrance_generation();
@@ -471,7 +473,6 @@ static void update_global_lighting()
 void update(void)
 {
     KFX_ZONE_COLOR("update", KFX_COLOR_SIMULATION);
-    struct PlayerInfo *player;
     SYNCDBG(4,"Starting for turn %ld",(long)get_gameturn());
 
     process_packets();
@@ -486,18 +487,16 @@ void update(void)
         game.map_changed_for_navigation = 0;
         return;
     }
-    player = get_my_player();
-    struct UserState *ustate = get_user_state(get_local_user());
 
     if (!flag_is_set(game.operation_flags,GOF_Paused))
     {
         for (int i = 1; i < EVENTS_COUNT; i++) {
             game.event[i].flags &= ~EvF_BtnFalling;
         }
-        if (flag_is_set(ustate->additional_flags,UsrAF_LightningPaletteIsActive))
+        if (local_state.lightning_palette_active)
         {
             PaletteSetUserPalette(get_local_user(), engine_palette);
-            clear_flag(ustate->additional_flags, UsrAF_LightningPaletteIsActive);
+            local_state.lightning_palette_active = false;
         }
         clear_active_dungeons_stats();
         update_creature_pool_state();
@@ -515,13 +514,12 @@ void update(void)
             process_computer_players2();
         process_players();
         process_action_points();
-        player = get_my_player();
-        if ((get_player_view_type(player) == PVT_CreatureContrl) || (get_player_view_type(player) == PVT_CreaturePasngr))
+        if ((get_user_view_type(get_my_user()) == PVT_CreatureContrl) || (get_user_view_type(get_my_user()) == PVT_CreaturePasngr))
         {
-            struct Thing *thing = thing_get(get_displayed_player()->controlled_thing_idx);
+            struct Thing *thing = thing_get(get_user_state(get_displayed_user())->controlled_thing_idx);
             update_first_person_object_ambience(thing);
         }
-        update_footsteps_nearest_camera(get_local_active_camera(player));
+        update_footsteps_nearest_camera(get_local_active_camera());
         PaletteFadePlayer(get_displayed_player());
         process_armageddon();
         update_global_lighting();
@@ -534,6 +532,8 @@ void update(void)
         if (replay.turns_packetoff == game.play_gameturn)
             exit_keeper = 1;
     }
+    update_local_possession();
+    update_local_first_person_view();
 
     message_update();
     update_camera_shake();

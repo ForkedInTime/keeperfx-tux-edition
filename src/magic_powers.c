@@ -133,7 +133,7 @@ const Magic_use_Func magic_use_func_list[] = {
 TbBool can_cast_spell_f(PlayerNumber plyr_idx, PowerKind pwkind, MapSubtlCoord stl_x, MapSubtlCoord stl_y, const struct Thing *thing, unsigned long flags, const char *func_name)
 {
     struct PlayerInfo* player = get_player(plyr_idx);
-    struct UserState* ustate = get_player_user_state(player);
+    struct UserState* ustate = get_player_primary_user_state(player);
     if (ustate->work_state == PSt_FreeDestroyWalls)
     {
         struct SlabConfigStats *slabst = get_slab_stats(get_slabmap_for_subtile(stl_x, stl_y));
@@ -1796,12 +1796,20 @@ static TbResult magic_use_power_slap_thing(PowerKind power_kind, PlayerNumber pl
     }
     player = get_player(plyr_idx);
     dungeon = get_dungeon(player->id_number);
-    if ((player->instance_num == PI_Whip) || (get_gameturn() - dungeon->last_creature_dropped_gameturn <= 10)) {
+    const NetUserId user = get_player_primary_user(player);
+    struct UserState *ustate = get_user_state(user);
+    const TbBool slapping = user_state_invalid(ustate) ? player->slap_cooldown_until_turn > get_gameturn() : ustate->instance_num == PI_Whip;
+    if (slapping || get_gameturn() - dungeon->last_creature_dropped_gameturn <= 10) {
         return Lb_OK;
     }
-    player->influenced_thing_idx = thing->index;
-    player->influenced_thing_creation = thing->creation_turn;
-    set_player_instance(player, PI_Whip, 0);
+    player->slap_cooldown_until_turn = get_gameturn() + player_instance_info[PI_Whip].length_turns;
+    if (user_state_invalid(ustate)) {
+        slap_thing(player, user, thing);
+    } else {
+        ustate->influenced_thing_idx = thing->index;
+        ustate->influenced_thing_creation = thing->creation_turn;
+        set_user_instance(user, PI_Whip, 0);
+    }
     dungeon->lvstats.num_slaps++;
     return Lb_SUCCESS;
 }
@@ -1828,14 +1836,14 @@ static TbResult magic_use_power_possess_thing(PowerKind power_kind, PlayerNumber
     }
 
     player = get_player(plyr_idx);
-    player->influenced_thing_idx = thing->index;
-    player->influenced_thing_creation = thing->creation_turn;
-    struct UserState* ustate = get_player_user_state(player);
+    struct UserState* ustate = get_player_primary_user_state(player);
+    ustate->influenced_thing_idx = thing->index;
+    ustate->influenced_thing_creation = thing->creation_turn;
     ustate->first_person_dig_claim_mode = false;
     ustate->teleport_destination = 19; // reset to default behaviour
     ustate->battleid = 1;
-    // Note that setting Direct Control player instance requires player->influenced_thing_idx to be set correctly
-    set_player_instance(player, PI_DirctCtrl, 0);
+    // Note that setting Direct Control player instance requires ustate->influenced_thing_idx to be set correctly
+    set_user_instance(get_player_primary_user(player), PI_DirctCtrl, 0);
     if (is_my_player(player)) {
         clear_flag(tool_tip_box.flags, TTip_Visible);
     }
@@ -2272,10 +2280,9 @@ TbResult script_use_power_on_creature(struct Thing* thing, short pwkind, KeepPwr
     return magic_use_power_direct(caster,pwkind,power_level,stl_x,stl_y,thing,mod_flags);
 }
 
-int get_power_overcharge_level(const struct PlayerInfo *player)
+int get_power_overcharge_level(const struct UserState *ustate)
 {
-    int i;
-    i = (player->cast_expand_level >> 2);
+    int i = ustate->cast_expand_level >> 2;
     if (i > POWER_MAX_LEVEL)
         return POWER_MAX_LEVEL;
     return i;
@@ -2284,26 +2291,28 @@ int get_power_overcharge_level(const struct PlayerInfo *player)
 /**
  * @return Is it necessary to continue trying the operation of increasing spell level
  */
-TbBool update_power_overcharge(struct PlayerInfo *player, int pwkind)
+TbBool update_power_overcharge(NetUserId user, int pwkind)
 {
-  struct Dungeon *dungeon;
+  struct UserState *ustate = get_user_state(user);
   int i;
   if (pwkind >= game.conf.magic_conf.power_types_count)
       return false;
-  dungeon = get_dungeon(player->id_number);
+  struct Dungeon *dungeon = get_players_dungeon(get_user_player(user));
+  if (dungeon_invalid(dungeon))
+      return false;
   const struct PowerConfigStats *powerst;
   powerst = get_power_model_stats(pwkind);
-  i = (player->cast_expand_level+1) >> 2;
+  i = (ustate->cast_expand_level+1) >> 2;
   if (i > POWER_MAX_LEVEL)
     i = POWER_MAX_LEVEL;
   if (powerst->cost[i] <= dungeon->total_money_owned)
   {
     // If we have more money, increase overcharge
-    if (((player->cast_expand_level+1) >> 2) <= POWER_MAX_LEVEL)
+    if (((ustate->cast_expand_level+1) >> 2) <= POWER_MAX_LEVEL)
     {
-      player->cast_expand_level++;
+      ustate->cast_expand_level++;
     }
-    if (((player->cast_expand_level+1) >> 2) <= POWER_MAX_LEVEL)
+    if (((ustate->cast_expand_level+1) >> 2) <= POWER_MAX_LEVEL)
     {
       return true;
     }
@@ -2316,9 +2325,9 @@ TbBool update_power_overcharge(struct PlayerInfo *player, int pwkind)
       if (i < 0) break;
     }
     if (i >= 0)
-      player->cast_expand_level = (i << 2) + 1;
+      ustate->cast_expand_level = (i << 2) + 1;
     else
-      player->cast_expand_level = 0;
+      ustate->cast_expand_level = 0;
   }
   return false;
 }

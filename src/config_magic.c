@@ -448,7 +448,7 @@ const struct NamedCommand magic_use_func_commands[] = {
 };
 
 
-unsigned char (*const powermodel_expand_check_func_list[])(const struct PlayerInfo *player) = {
+unsigned char (*const powermodel_expand_check_func_list[])(PlayerNumber plyr_idx, const struct UserState *ustate) = {
   NULL,
   general_expand_check,
   sight_of_evil_expand_check,
@@ -1402,22 +1402,32 @@ TbBool add_power_to_player(PowerKind pwkind, PlayerNumber plyr_idx)
 
 void remove_power_from_player(PowerKind pwkind, PlayerNumber plyr_idx)
 {
+    if (decrease_power_level_of_player(pwkind, plyr_idx) && (get_dungeon(plyr_idx)->magic_level[pwkind] == 0))
+        power_lost_side_effects(pwkind, plyr_idx);
+}
+
+TbBool decrease_power_level_of_player(PowerKind pwkind, PlayerNumber plyr_idx)
+{
     struct Dungeon* dungeon = get_dungeon(plyr_idx);
-    struct PlayerInfo* player;
-    struct Thing* thing;
     if (dungeon_invalid(dungeon))
     {
         ERRORLOG("Cannot remove spell %s from invalid dungeon %d!",power_code_name(pwkind),(int)plyr_idx);
-        return;
+        return false;
     }
     long i = dungeon->magic_level[pwkind];
     if (i < 1)
     {
         ERRORLOG("Cannot remove spell %s (%d) from player %d as he doesn't have it!",power_code_name(pwkind),(int)pwkind,(int)plyr_idx);
-        return;
+        return false;
     }
     SYNCDBG(4,"Decreasing spell %s of player %d to level %d",power_code_name(pwkind),(int)plyr_idx,(int)i-1);
     dungeon->magic_level[pwkind] = i-1;
+    return true;
+}
+
+void power_lost_side_effects(PowerKind pwkind, PlayerNumber plyr_idx)
+{
+    struct Thing* thing;
     switch (pwkind)
     {
     case PwrK_OBEY:
@@ -1433,11 +1443,13 @@ void remove_power_from_player(PowerKind pwkind, PlayerNumber plyr_idx)
             turn_off_power_call_to_arms(plyr_idx);
         break;
     case PwrK_POSSESS:
-        player = get_player(plyr_idx);
-        if (get_player_view_type(player) == PVT_CreatureContrl)
+        for (NetUserId user = 0; user < MAX_NET_USERS; user++)
         {
-            thing = thing_get(player->controlled_thing_idx);
-            prepare_to_controlled_creature_death(thing);
+            if (get_net_user_player_number(user) == plyr_idx && get_user_view_type(user) == PVT_CreatureContrl)
+            {
+                thing = thing_get(get_user_state(user)->controlled_thing_idx);
+                prepare_to_controlled_creature_death(thing);
+            }
         }
         break;
     }

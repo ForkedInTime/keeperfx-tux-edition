@@ -35,11 +35,11 @@
 #include "game_heap.h"
 #include "game_legacy.h"
 #include "replay.h"
-#include "replay_rewind.h"
 #include "game_merge.h"
 #include "gui_topmsg.h"
 #include "gui_soundmsgs.h"
 #include "kjm_input.h"
+#include "lens_api.h"
 #include "config_sounds.h"
 #include "lvl_filesdk1.h"
 #include "lua_base.h"
@@ -159,9 +159,6 @@ static void init_keepers_map_exploration(void)
 
 static TbBool init_level(void)
 {
-    if (network_is_active() && net_join_role == NetRole_Player) {
-        net_lobby_set_phase(NetPhase_Loading);
-    }
     SYNCDBG(6,"Starting");
     struct IntralevelData transfer_mem;
     //memcpy(&transfer_mem,&game.intralvl.transferred_creature,sizeof(struct CreatureStorage));
@@ -180,6 +177,7 @@ static TbBool init_level(void)
     // above. No-op on software / before GL is active.
     RendererClearKeeperSpriteAtlas();
     lens_mode = 0;
+    reset_lens_failures();
     setup_heap_manager();
 
     wait_for_all_players();
@@ -324,7 +322,6 @@ TbBool startup_saved_packet_game(void)
 {
     struct CatalogueEntry centry;
     clear_packets();
-    replay_rewind_reset();
     if (!open_packet_file_for_load(replay.fname,&centry))
     {
         ERRORLOG("Cannot replay \"%s\": unreadable, or written by an incompatible version",
@@ -385,9 +382,8 @@ TbBool startup_saved_packet_game(void)
     init_players();
     for (NetUserId user = 0; user < MAX_NET_USERS; user++)
     {
-        const PlayerNumber plyr_idx = get_net_user_player_number(user);
-        if ((plyr_idx >= 0) && (replay.head.user_players[user] >= 0))
-            apply_user_start_tendencies(get_player(plyr_idx));
+        if ((get_net_user_player_number(user) >= 0) && (replay.head.user_players[user] >= 0))
+            apply_user_start_tendencies(user);
     }
     frontend_alliances = replay.head.frontend_alliances;
     setup_alliances();
@@ -399,7 +395,7 @@ TbBool startup_saved_packet_game(void)
     if ((game.mode_flags & MFlg_IsDemoMode) == 0) {
         observer_init(my_player_number);
     }
-    update_engine_view(get_my_player(), false);
+    update_local_view(get_my_user(), false);
     return true;
 }
 
@@ -416,6 +412,7 @@ void startup_network_game(CoroutineLoop *context, TbBool local)
         game.local_plyr_idx = default_loc_player;
         my_player_number = default_loc_player;
     }
+    net_lobby_empty_seats = 0;
     if (!init_level()) {
         coroutine_clear(context, true);
         return;
@@ -425,6 +422,7 @@ void startup_network_game(CoroutineLoop *context, TbBool local)
     if (local)
     {
         game.game_kind = GKind_LocalGame;
+        frontnet_skirmish_resolve_seats();
         init_players_local_game();
         if (AssignCpuKeepers || campaign.assignCpuKeepers) {
             ShouldAssignCpuKeepers = 1;
@@ -433,6 +431,7 @@ void startup_network_game(CoroutineLoop *context, TbBool local)
     {
         game.game_kind = GKind_MultiGame;
         if (!init_players_network_game()) {
+            clear_flag(game.operation_flags, GOF_SingleLevel);
             coroutine_clear(context, true);
             return;
         }
@@ -456,18 +455,16 @@ static CoroutineLoopState startup_network_game_tail(CoroutineLoop *context)
         return CLS_CONTINUE;
     }
     TbBool ShouldAssignCpuKeepers = coroutine_args(context)[0];
-    if (game.game_kind == GKind_MultiGame) {
-        setup_alliances();
-    }
     if (fe_computer_players || ShouldAssignCpuKeepers)
     {
         SYNCDBG(5,"Setting up uninitialized players as computer players");
-        setup_computer_players();
+        setup_computer_players(net_lobby_empty_seats);
     } else
     {
         SYNCDBG(5,"Setting up uninitialized players as zombie players");
         setup_zombie_players();
     }
+    setup_alliances();
     post_init_level();
     post_init_players();
     post_init_packets();
@@ -527,6 +524,7 @@ void clear_complete_game(void)
         game.user_states[user].player_id = PLAYER_NONE;
     }
     memset(&intralvl, 0, sizeof(struct IntralevelData));
+    clear_custom_intralevel_data();
     replay.turns_packetoff = -1;
     game.local_plyr_idx = default_loc_player;
     replay.checksum_verify = start_params.packet_checksum_verify;

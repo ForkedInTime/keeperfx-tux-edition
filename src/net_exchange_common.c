@@ -198,6 +198,14 @@ TbBool read_network_message_text(char **read_pos, const char **text, size_t max_
     return true;
 }
 
+// safe copy + nul terminator
+void copy_chat_message(char *dst, const char *src)
+{
+    const size_t len = strnlen(src, PLAYER_MP_MESSAGE_LEN - 1);
+    memcpy(dst, src, len);
+    dst[len] = '\0';
+}
+
 void send_network_chat_message(NetUserId sender, const char *message)
 {
     send_network_chat_message_at(sender, message, -1, -1);
@@ -231,18 +239,6 @@ void send_network_chat_message_at(NetUserId sender, const char *message, int32_t
     send_remote_buffer(write_pos);
 }
 
-struct PlayerInfo *prepare_network_chat_message(int player_id, const char *message)
-{
-    struct PlayerInfo *player = get_player(player_id);
-    get_player_user_state(player)->init_flags &= ~UsrIF_NewMPMessage;
-    if (message[0] != '\0') {
-        memcpy(player->mp_message_text, message, PLAYER_MP_MESSAGE_LEN);
-        memcpy(player->mp_message_text_last, message, PLAYER_MP_MESSAGE_LEN);
-    } else {
-        memset(player->mp_message_text, 0, PLAYER_MP_MESSAGE_LEN);
-    }
-    return player;
-}
 
 TbBool can_send_to_peer(NetUserId peer_id)
 {
@@ -392,11 +388,17 @@ TbError process_network_message(NetUserId source, void *server_buf, size_t frame
     case NETMSG_SPECTATOR_BOOTSTRAP:
         return process_network_spectator_bootstrap(source, read_pos, payload_size);
     case NETMSG_SPECTATOR_READY:
-        return process_network_spectator_ready(source, payload_size);
+        return process_network_spectator_ready(source, read_pos, payload_size);
     case NETMSG_SPECTATOR_CHAT:
         return process_network_spectator_chat(source, read_pos, payload_size);
     case NETMSG_SPECTATOR_NOTICE:
         return process_network_spectator_notice(source, read_pos, payload_size);
+    case NETMSG_SPECTATOR_CONVERSION:
+        return process_network_spectator_conversion(source, read_pos, payload_size);
+    case NETMSG_LOBBY_SETTINGS:
+        return process_lobby_settings_message(source, read_pos, payload_size);
+    case NETMSG_SPECTATOR_SEAT:
+        return process_network_spectator_seat(source, read_pos, payload_size);
     default:
         return Lb_OK;
     }
@@ -405,10 +407,13 @@ TbError process_network_message(NetUserId source, void *server_buf, size_t frame
 TbError exchange_frame_block(enum NetMessageType msg_type, void *send_buf, void *server_buf, size_t frame_size)
 {
     TbBool frontend_exchange;
+    TbClockMSec exchange_timeout;
     if (msg_type == NETMSG_FRONTEND) {
         frontend_exchange = true;
+        exchange_timeout = TIMEOUT_LOBBY_EXCHANGE;
     } else if (msg_type == NETMSG_STARTUP_SYNC) {
         frontend_exchange = false;
+        exchange_timeout = PEER_TIMEOUT_MS;
     } else {
         ERRORLOG("exchange_frame_block unsupported message type %d", (int)msg_type);
         return Lb_FAIL;
@@ -422,7 +427,7 @@ TbError exchange_frame_block(enum NetMessageType msg_type, void *send_buf, void 
     TbBool is_host = network_is_host();
     TbClockMSec wait_start_time = LbTimerClock();
     TbBool stop_waiting = false;
-    while (LbTimerClock() - wait_start_time < TIMEOUT_LOBBY_EXCHANGE) {
+    while (LbTimerClock() - wait_start_time < exchange_timeout) {
         if (frontend_exchange && frontend_menu_state == FeSt_START_MPLEVEL) {
             break;
         }
@@ -492,7 +497,7 @@ void process_peer_msgs(NetUserId peer_id, void *server_buf, size_t frame_size)
         network_spectator_receive_turns(server_buf, frame_size);
         return;
     }
-    while (!netstate.resync_pending && netstate.sp->msgready(peer_id, 0)) {
+    while (!netstate.resync_pending && netstate.pending_spectator_id == INVALID_USER_ID && netstate.sp->msgready(peer_id, 0)) {
         process_network_message(peer_id, server_buf, frame_size, NETMSG_GAMEPLAY_UNSEQUENCED, NULL);
     }
 }
@@ -519,7 +524,7 @@ void wait_for_all_players(void)
     TbClockMSec wait_start_time = LbTimerClock();
     TbClockMSec last_send_time = wait_start_time - resend_interval;
     TbError result = Lb_FAIL;
-    while (result != Lb_OK && LbTimerClock() - wait_start_time < TIMEOUT_WAIT_FOR_ALL_PLAYERS) {
+    while (result != Lb_OK && LbTimerClock() - wait_start_time < PEER_TIMEOUT_MS) {
         TbClockMSec now = LbTimerClock();
         if (now - last_send_time >= resend_interval) {
             if (!is_host || all_expected_exchange_frames_received(has_received_frame, is_host)) {
@@ -574,11 +579,15 @@ void wait_for_all_players(void)
             }
         }
         if (result != Lb_OK) {
+            if (!poll_inputs()) {
+                exit_keeper = 1;
+                return;
+            }
             SDL_Delay(1);
         }
     }
     netstate.seq_nbr += 1;
     if (result != Lb_OK) {
-        ERRORLOG("Network synchronization wait failed: TIMEOUT_WAIT_FOR_ALL_PLAYERS expired after %d ms", TIMEOUT_WAIT_FOR_ALL_PLAYERS);
+        ERRORLOG("Network synchronization wait failed: PEER_TIMEOUT_MS expired after %d ms", PEER_TIMEOUT_MS);
     }
 }

@@ -37,7 +37,7 @@ extern "C" {
 #define INVALID_PLAYER (&bad_player)
 #define INVALID_USER_STATE (&bad_user_state)
 
-#define PLAYER_MP_MESSAGE_LEN  64
+#define PLAYER_MP_MESSAGE_LEN  128
 
 #define MINIMAP_ZOOM_MIN       128
 #define MINIMAP_ZOOM_DEFAULT   256
@@ -96,8 +96,8 @@ enum UserInitFlags {
 enum UserAdditionalFlags {
     UsrAF_None                      = 0x00,
     UsrAF_ChosenSubTileIsHigh       = 0x02, // Chosen subtile is at ceiling height (dirt/rock/wall etc)
-    UsrAF_FreezePaletteIsActive     = 0x04, // blue_palette is being used during Freeze Spell. TODO: move to LocalState
-    UsrAF_LightningPaletteIsActive  = 0x08, // lightning_palette is being used during Lightning Spell. TODO: move to LocalState
+    UsrAF_Unkn04                    = 0x04,
+    UsrAF_Unkn08                    = 0x08,
     UsrAF_UnlockedLordTorture       = 0x10, // if this flag is set, the user will be sent to the Lord Torture Mini-game
     UsrAF_Unkn20                    = 0x20,
     UsrAF_Unkn40                    = 0x40,
@@ -107,10 +107,10 @@ enum UserAdditionalFlags {
 enum PlayerTypes {
     // a proper player with room flames, payday, captures neutrals
     PT_Keeper,
-    
+
     // hero-style player: lacks room flames, sees whole map, can't capture neutral, no economy.
     PT_Roaming,
-    
+
     // capturable by nearby keepers
     PT_Neutral
 };
@@ -149,6 +149,10 @@ struct CheatSelection
     unsigned char chosen_creature_kind;
     unsigned char chosen_hero_kind;
     unsigned char chosen_experience_level;
+    ThingIndex chosen_thing_idx;
+    GameTurn chosen_thing_creation;
+    RoomIndex chosen_room_idx;
+    GameTurn chosen_room_creation;
 };
 
 /*
@@ -157,46 +161,30 @@ struct CheatSelection
  * Players present in a game can be human-controlled keepers, Computer-controlled keepers,
  * "Placeholder" keepers (humans who have dropped and are replaced by a computer),
  * "Roaming" (the hero team), or neutral (capturable by keepers).
- * 
+ *
  * Note: for legacy reasons, this struct currently contains some fields that
  * should eventually be ported to UserState or LocalState.
 */
 struct PlayerInfo {
-    unsigned char allocflags;
-    unsigned char display_flags;
-    unsigned int hand_busy_until_turn;
+    unsigned char allocflags; /* enum PlayerInitFlags */
+    unsigned char player_type; /* enum PlayerTypes */
+    unsigned char display_flags; /* enum PlayerField6Flags -- TODO: make local state */
+    unsigned char id_number;
     char player_name[20];
     unsigned char victory_state;
     PlayerBitFlags allied_players;
     PlayerBitFlags players_with_locked_ally_status;
-    unsigned char id_number;
-    TbBool unused;
-    short controlled_thing_idx;
-    GameTurn controlled_thing_creatrn;
     TbBool possession_lock;
-    MapCoord zoom_to_pos_x;
-    MapCoord zoom_to_pos_y;
     struct Wander wandr_within;
     struct Wander wandr_outside;
-    short cta_flag_idx;
-    short influenced_thing_idx;
-    GameTurn influenced_thing_creation;
-    char mp_message_text[PLAYER_MP_MESSAGE_LEN];
-    char mp_pending_message[PLAYER_MP_MESSAGE_LEN];
-    char mp_message_text_last[PLAYER_MP_MESSAGE_LEN];
-    /** An "instance" is a short, scripted animation. See: enum PlayerInstanceNum */
-    unsigned char instance_num;
-    uint32_t instance_remain_turns;
-    /** Overcharge level while casting keeper powers. */
-    int32_t cast_expand_level;
+    short cta_flag_idx; /* Call-to-Arms banner */
     GameTurn power_of_cooldown_turn;
-    int32_t game_version;
     GameTurn display_objective_turn;
-    unsigned char hand_idx;
+    GameTurn slap_cooldown_until_turn; /* computer-only, prevents slapping too fast. */
+    unsigned char hand_idx; /* hand skin (powerhands.toml) */
     struct RoomSpace roomspace;
-    unsigned char player_type; //enum PlayerTypes
-    ThingModel special_digger;
-    unsigned short generate_speed;
+    ThingModel special_digger; /* which creatures are imp-like */
+    unsigned short generate_speed; /* portal creature frequency */
 };
 
 #define PLAYER_NONE (-1)
@@ -209,6 +197,7 @@ struct PlayerInfo {
  */
 struct UserState {
     PlayerNumber player_id;
+    PlayerNumber reconnect_player_id;
     unsigned char init_flags; // Uses UserInitFlags
     unsigned char additional_flags; // Uses UserAdditionalFlags
     unsigned char input_crtr_control;
@@ -252,6 +241,7 @@ struct UserState {
     short thing_under_hand;
     short hand_thing_idx;
     int32_t hand_animationId;
+    GameTurn hand_animation_until_turn;
     struct RoomSpace render_roomspace;
     unsigned char roomspace_mode;
     int roomspace_detection_looseness;
@@ -261,6 +251,20 @@ struct UserState {
     TbBool roomspace_drag_paint_mode;
     unsigned char roomspace_l_shape;
     TbBool roomspace_horizontal_first;
+    /** An "instance" is a short, scripted animation. See: enum PlayerInstanceNum */
+    unsigned char instance_num;
+    uint32_t instance_remain_turns;
+    short influenced_thing_idx; /* thing the current instance/cheat applies to */
+    GameTurn influenced_thing_creation;
+    short controlled_thing_idx;
+    GameTurn controlled_thing_creatrn;
+    MapCoord zoom_to_pos_x;
+    MapCoord zoom_to_pos_y;
+    /** Overcharge level while casting keeper powers. */
+    int32_t cast_expand_level;
+    /** A lenses.cfg index, or Lua if when custom_lens is set. */
+    short lens_type;
+    char custom_lens[COMMAND_WORD_LEN];
 };
 
 /******************************************************************************/
@@ -307,6 +311,8 @@ extern struct LocalState {
     TbBool swipe_sprite_drawLR; /**< Used to decide whether to draw the swipe sprite left to right (TRUE), or [default] right to left (FALSE). */
     unsigned char *lens_palette;
     unsigned char *main_palette;
+    TbBool lightning_palette_active;
+    TbBool freeze_palette_active;
     TbBool map_fade_prepared;
     unsigned char map_fade_view_type;
     int32_t map_fade_turns;
@@ -338,6 +344,8 @@ extern struct LocalState {
     TbBool show_gui;
     TbBool show_panel;
     TbBool rewinding;
+    char mp_message_text[PLAYER_MP_MESSAGE_LEN];
+    char mp_message_text_last[PLAYER_MP_MESSAGE_LEN];
 } local_state;
 
 extern unsigned short player_colors_map[];
@@ -354,15 +362,20 @@ struct PlayerInfo *get_player_f(PlayerNumber plyr_idx,const char *func_name);
 #define get_player(plyr_idx) get_player_f(plyr_idx,__func__)
 struct PlayerInfo *get_my_player(void);
 const struct PlayerInfo *get_displayed_player(void);
+NetUserId get_displayed_user(void);
 TbBool player_invalid(const struct PlayerInfo *player);
 TbBool player_exists(const struct PlayerInfo *player);
 TbBool is_active_keeper(const struct PlayerInfo *player);
 TbBool is_my_player(const struct PlayerInfo *player);
+NetUserId get_my_user(void);
+TbBool is_local_user(NetUserId user);
 struct UserState *get_user_state(NetUserId user);
-struct UserState *get_player_user_state(const struct PlayerInfo *player);
+struct UserState *get_player_primary_user_state(const struct PlayerInfo *player);
 struct UserState *get_local_user_state(void);
 void set_local_user_state_prediction(const struct UserState *ustate);
-const struct UserState *get_player_user_state_prediction(const struct PlayerInfo *player);
+const struct UserState *get_user_state_prediction(NetUserId user);
+const struct UserState *get_local_user_state_prediction(void);
+ThingIndex get_user_thing_under_hand(NetUserId user);
 uint32_t get_local_minimap_zoom(void);
 TbBool user_state_invalid(const struct UserState *ustate);
 int32_t user_zoom_min(const struct UserState *ustate, TbBool front_view);
@@ -388,9 +401,9 @@ void reset_user_view_type(NetUserId user, unsigned short nview);
 
 void clear_players(void);
 
-unsigned char get_player_view_type(const struct PlayerInfo *player);
-unsigned char get_player_active_camera_index(const struct PlayerInfo *player);
-int32_t get_player_dungeon_yaw(const struct PlayerInfo *player);
+unsigned char get_user_view_type(NetUserId user);
+unsigned char get_user_active_camera_index(NetUserId user);
+int32_t get_user_dungeon_yaw(NetUserId user);
 enum LocalViewMode get_dungeon_view_mode(const struct UserState *ustate);
 void rotate_mode_to_dungeon_view(unsigned char mode, TbBool *front_view, TbBool *wibble);
 NetUserId get_player_primary_user(const struct PlayerInfo *player);

@@ -300,7 +300,7 @@ TbBool kernel_memtracker_init(void)
 #endif
         if (!available)
         {
-            WARNLOG("Kernel memory tracking is not available; falling back to scanning");
+            WARNLOG("Kernel memory tracking is not available");
         }
     }
     return available;

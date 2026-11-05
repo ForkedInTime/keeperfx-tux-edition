@@ -388,7 +388,7 @@ void update_query_menu()
 {
     if(!(menu_is_active(GMnu_CREATURE_QUERY1) || menu_is_active(GMnu_CREATURE_QUERY2) || menu_is_active(GMnu_CREATURE_QUERY3) || menu_is_active(GMnu_CREATURE_QUERY4)))
         return;
-    struct Thing* thing = thing_get(get_displayed_player()->influenced_thing_idx);
+    struct Thing* thing = thing_get(get_user_state(get_displayed_user())->influenced_thing_idx);
 
     if (menu_is_active(GMnu_CREATURE_QUERY1))
     {
@@ -581,6 +581,24 @@ void turn_off_event_box_if_necessary(PlayerNumber plyr_idx, unsigned char event_
     turn_off_menu(GMnu_TEXT_INFO);
     turn_off_menu(GMnu_BATTLE);
     turn_off_menu(GMnu_DUNGEON_SPECIAL);
+}
+
+void turn_off_event_box_if_stale(void)
+{
+    if (my_visible_event_idx == 0) {
+        return;
+    }
+    if (game.event[my_visible_event_idx].kind != 0)
+    {
+        const struct Dungeon *dungeon = get_my_dungeon();
+        for (int i = 0; i <= EVENT_BUTTONS_COUNT; i++)
+        {
+            if (dungeon->event_button_index[i] == my_visible_event_idx) {
+                return;
+            }
+        }
+    }
+    turn_off_event_box_if_necessary(my_player_number, my_visible_event_idx);
 }
 
 /******************************************************************************/

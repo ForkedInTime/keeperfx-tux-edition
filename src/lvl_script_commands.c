@@ -597,6 +597,24 @@ TbBool parse_get_varib(const char *varib_name, int32_t *varib_id, int32_t *varib
             }
             *varib_type = SVar_DESTROYED_KEEPER;
         }
+        else if (2 == sscanf(varib_name, "BATTLES_WON[%n%[^]]%c", &len, arg, &c) && (c == ']'))
+        {
+            *varib_id = get_id(player_desc, arg);
+            if (*varib_id == -1)
+            {
+                *varib_id = get_id(cmpgn_human_player_options, arg);
+            }
+            *varib_type = SVar_BATTLES_WON_VS;
+        }
+        else if (2 == sscanf(varib_name, "BATTLES_LOST[%n%[^]]%c", &len, arg, &c) && (c == ']'))
+        {
+            *varib_id = get_id(player_desc, arg);
+            if (*varib_id == -1)
+            {
+                *varib_id = get_id(cmpgn_human_player_options, arg);
+            }
+            *varib_type = SVar_BATTLES_LOST_VS;
+        }
         else if (2 == sscanf(varib_name, "SACRIFICED[%n%[^]]%c", &len, arg, &c) && (c == ']'))
         {
             *varib_id = get_id(creature_desc, arg);
@@ -1969,11 +1987,13 @@ static void new_trap_type_check(const struct ScriptLine* scline)
 static void set_trap_configuration_process(struct ScriptContext *context)
 {
     set_config_process(&trapdoor_trap_named_fields_set, context, "SET_TRAP_CONFIGURATION");
+    create_manufacture_array_from_trapdoor_data();
 }
 
 static void set_room_configuration_process(struct ScriptContext *context)
 {
     set_config_process(&terrain_room_named_fields_set, context, "SET_ROOM_CONFIGURATION");
+    update_room_tab_to_config();
 }
 
 static void set_hand_rule_process(struct ScriptContext* context)
@@ -2034,6 +2054,7 @@ static void set_door_configuration_check(const struct ScriptLine* scline)
 static void set_door_configuration_process(struct ScriptContext *context)
 {
     set_config_process(&trapdoor_door_named_fields_set, context, "SET_DOOR_CONFIGURATION");
+    create_manufacture_array_from_trapdoor_data();
 }
 
 static void create_effect_at_pos_process(struct ScriptContext* context)
@@ -3599,23 +3620,11 @@ static void set_creature_configuration_process(struct ScriptContext* context)
         case 4: // EYEEFFECT
         {
             crconf->eye_effect = value;
-            struct Thing* thing = thing_get(get_my_player()->influenced_thing_idx);
-            if(thing_exists(thing))
+            for (NetUserId user = 0; user < MAX_NET_USERS; user++)
             {
-                if (thing->model == creatid)
-                {
-                    struct LensConfig* lenscfg = get_lens_config(value);
-                    initialise_eye_lenses();
-                    if (flag_is_set(lenscfg->flags, LCF_HasPalette))
-                    {
-                        PaletteSetUserPalette(get_local_user(), lenscfg->palette);
-                    }
-                    else
-                    {
-                        PaletteSetUserPalette(get_local_user(), engine_palette);
-                    }
-                    setup_eye_lens(value);
-                }
+                struct Thing* thing = thing_get(get_user_state(user)->controlled_thing_idx);
+                if (thing_is_creature(thing) && (thing->model == creatid) && flag_is_set(thing->alloc_flags, TAlF_IsControlled))
+                    set_player_lens(get_net_user_player_number(user), value);
             }
             break;
         }
@@ -5541,8 +5550,7 @@ static void set_power_configuration_process(struct ScriptContext *context)
             break;
     }
     update_powers_tab_to_config();
-    struct PlayerInfo *player = get_my_player();
-    if (get_player_view_type(player) == PVT_DungeonTop)
+    if (get_user_view_type(get_my_user()) == PVT_DungeonTop)
     {
         if (menu_is_active(GMnu_SPELL))
         {
