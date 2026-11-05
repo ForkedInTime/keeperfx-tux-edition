@@ -86,7 +86,7 @@ struct Thing *create_gold_for_hand_grab(struct Thing *thing, long owner)
     struct Dungeon *dungeon;
     dungeon = get_players_num_dungeon(owner);
     struct PlayerInfo* player = get_player(dungeon->owner);
-    struct UserState* ustate = get_player_user_state(player);
+    struct UserState* ustate = get_player_primary_user_state(player);
     TbBool pickup_all = !user_state_invalid(ustate) && ustate->pickup_all_gold;
     if (dungeon->gold_hoard_for_pickup != thing->index)
     {
@@ -339,18 +339,18 @@ void set_power_hand_graphic(NetUserId user, long HandAnimationID)
         // (computer keepers have no hand animation)
         return;
     }
-    struct PlayerInfo *player = get_user_player(user);
-    if (player->hand_busy_until_turn >= get_gameturn())
+    if (ustate->hand_animation_until_turn >= get_gameturn())
     {
         if ((HandAnimationID == HndA_Slap) || (HandAnimationID == HndA_SideSlap))
-          player->hand_busy_until_turn = 0;
+          ustate->hand_animation_until_turn = 0;
     }
-    if (player->hand_busy_until_turn < get_gameturn())
+    if (ustate->hand_animation_until_turn < get_gameturn())
     {
         if ((ustate->hand_animationId != HandAnimationID) || (HandAnimationID == HndA_Pickup))
         {
             ustate->hand_animationId = HandAnimationID;
             struct Thing *thing = thing_get(ustate->hand_thing_idx);
+            const struct PlayerInfo *player = get_user_player(user);
             int32_t anim_idx = game.conf.power_hand_conf.pwrhnd_cfg_stats[player->hand_idx].anim_idx[HandAnimationID];
             short anim_speed = game.conf.power_hand_conf.pwrhnd_cfg_stats[player->hand_idx].anim_speed[HandAnimationID];
             if ((HandAnimationID == HndA_Hover) || (HandAnimationID == HndA_HoldGold))
@@ -372,12 +372,9 @@ TbBool power_hand_is_empty(const struct PlayerInfo *player)
     return (dungeon->num_things_in_hand <= 0);
 }
 
-TbBool power_hand_is_hovering(const struct PlayerInfo *player)
+TbBool power_hand_is_hovering(NetUserId user)
 {
-    if (is_my_player(player)) {
-        return local_state.local_thing_under_hand > 0;
-    }
-    return get_player_user_state(player)->thing_under_hand > 0;
+    return get_user_thing_under_hand(user) > 0;
 }
 
 TbBool power_hand_is_full(const struct PlayerInfo *player)
@@ -557,7 +554,7 @@ void draw_power_hand(void)
     struct Thing *picktng;
     struct Room *room;
     struct RoomConfigStats* roomst;
-    const struct UserState *ustate = get_player_user_state(player);
+    const struct UserState *ustate = get_user_state_prediction(get_displayed_user());
     int32_t cursor_x;
     int32_t cursor_y;
     if (!get_gameplay_cursor_position(&cursor_x, &cursor_y)) {
@@ -570,7 +567,7 @@ void draw_power_hand(void)
     if (is_observer_camera_active())
         return;
     RendererSetDrawFlags(observer_watched_cursor_draw_flags());
-    if (get_player_view_type(player) != PVT_DungeonTop)
+    if (get_user_view_type(get_displayed_user()) != PVT_DungeonTop)
         return;
     // Color rendering array pointers used by draw_keepersprite()
     render_fade_tables = pixmap.fade_tables;
@@ -608,7 +605,7 @@ void draw_power_hand(void)
         draw_mini_things_in_hand(cursor_x+scale_ui_value(10*global_hand_scale), cursor_y+scale_ui_value(10*global_hand_scale));
         return;
     }
-    TbBool hover_hand = power_hand_is_hovering(player);
+    TbBool hover_hand = power_hand_is_hovering(get_displayed_user());
     thing = thing_get(ustate->hand_thing_idx);
     if (!thing_exists(thing)) {
         if (hover_hand && ustate->work_state == PSt_CtrlDungeon) {
@@ -617,7 +614,7 @@ void draw_power_hand(void)
         }
         return;
     }
-    if (player->hand_busy_until_turn > get_gameturn())
+    if (ustate->hand_animation_until_turn > get_gameturn())
     {
         SYNCDBG(7,"Drawing hand %s index %d, busy state", thing_model_name(thing), (int)thing->index);
         RendererSubmitKeeperHandSprite(cursor_x+scale_ui_value(60*global_hand_scale), cursor_y+scale_ui_value(40*global_hand_scale),
@@ -638,7 +635,7 @@ void draw_power_hand(void)
       }
       if ((ustate->work_state != PSt_CtrlDungeon) || !draw_hand)
       {
-        if ((player->instance_num != PI_Grab) && (player->instance_num != PI_Drop) && (player->instance_num != PI_Whip) && (player->instance_num != PI_WhipEnd))
+        if (ustate->instance_num != PI_Grab && ustate->instance_num != PI_Drop && ustate->instance_num != PI_Whip && ustate->instance_num != PI_WhipEnd)
         {
           if (ustate->work_state == PSt_Slap)
           {
@@ -884,8 +881,11 @@ void drop_gold_coins(const struct Coord3d *pos, long value, long plyr_idx)
     struct PlayerInfo *player;
     player = get_player(plyr_idx);
     if (player_exists(player)) {
-        set_power_hand_graphic(get_player_primary_user(player), HndA_Hover);
-        player->hand_busy_until_turn = get_gameturn() + 16;
+        const NetUserId user = get_player_primary_user(player);
+        set_power_hand_graphic(user, HndA_Hover);
+        struct UserState *ustate = get_user_state(user);
+        if (!user_state_invalid(ustate))
+            ustate->hand_animation_until_turn = get_gameturn() + 16;
     }
 }
 
@@ -1016,7 +1016,7 @@ void drop_held_thing_on_ground(struct Dungeon *dungeon, struct Thing *droptng, c
 short dump_first_held_thing_on_map(PlayerNumber plyr_idx, MapSubtlCoord stl_x, MapSubtlCoord stl_y, TbBool update_hand)
 {
     struct PlayerInfo *player = get_player(plyr_idx);
-    struct UserState* ustate = get_player_user_state(player);
+    struct UserState* ustate = get_player_primary_user_state(player);
     struct Dungeon *dungeon = get_players_dungeon(player);
     // If nothing in hand - nothing to do
     if (dungeon->num_things_in_hand < 1) {
@@ -1064,7 +1064,7 @@ short dump_first_held_thing_on_map(PlayerNumber plyr_idx, MapSubtlCoord stl_x, M
         drop_held_thing_on_ground(dungeon, droptng, &pos);
     }
     if (dungeon->num_things_in_hand == 1) {
-        set_player_instance(player, PI_Drop, 0);
+        set_user_instance(get_player_primary_user(player), PI_Drop, 0);
     }
     remove_first_thing_from_power_hand_list(plyr_idx);
     return 1;
@@ -1390,9 +1390,11 @@ long prepare_thing_for_power_hand(unsigned short tng_idx, PlayerNumber plyr_idx)
     }
     struct Thing *thing;
     thing = thing_get(tng_idx);
-    player->influenced_thing_idx = thing->index;
-    player->influenced_thing_creation = thing->creation_turn;
-    set_player_instance(player, PI_Grab, 0);
+    if (!user_state_invalid(ustate)) {
+        ustate->influenced_thing_idx = thing->index;
+        ustate->influenced_thing_creation = thing->creation_turn;
+    }
+    set_user_instance(user, PI_Grab, 0);
     if (thing_is_creature(thing)) {
         clear_creature_instance(thing);
     }
@@ -1500,7 +1502,7 @@ TbResult use_power_hand(PlayerNumber plyr_idx, MapSubtlCoord stl_x, MapSubtlCoor
     }
     if (thing_is_invalid(thing))
     {
-        const short under_hand = get_player_user_state(player)->thing_under_hand;
+        const short under_hand = get_player_primary_user_state(player)->thing_under_hand;
         if (under_hand > 0)
             thing = thing_get(under_hand);
     }
@@ -1740,8 +1742,21 @@ TbBool eval_hand_rule_for_thing(struct HandRule *rule, const struct Thing *thing
 
 TbBool thing_pickup_is_blocked_by_hand_rule(const struct Thing *thing_to_pick, PlayerNumber plyr_idx) {
     struct Dungeon* dungeon = get_dungeon(plyr_idx);
+    if (dungeon_invalid(dungeon))
+    {
+        ERRORLOG("Invalid dungeon for player %d, creature index %d model %d owner %d",
+            (int)plyr_idx, (int)thing_to_pick->index, (int)thing_to_pick->model, (int)thing_to_pick->owner);
+        return false;
+    }
     if (thing_is_creature(thing_to_pick))
     {
+        if (thing_to_pick->model < 0 || thing_to_pick->model >= CREATURE_TYPES_MAX)
+        {
+            ERRORLOG("Creature index %d has out-of-range model %d (max %d), class_id %d, owner %d, alloc_flags 0x%02x",
+                (int)thing_to_pick->index, (int)thing_to_pick->model, (int)CREATURE_TYPES_MAX,
+                (int)thing_to_pick->class_id, (int)thing_to_pick->owner, (unsigned)thing_to_pick->alloc_flags);
+            return false;
+        }
         struct HandRule hand_rule;
         TbBool overwrite_default_block = false;
         for (int i = HAND_RULE_SLOTS_COUNT - 1; i >= 0; i--)

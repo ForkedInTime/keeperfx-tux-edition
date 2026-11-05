@@ -295,14 +295,17 @@ void view_set_camera_tilt(struct Camera *cam, unsigned char mode)
 
 void init_player_cameras(struct PlayerInfo *player)
 {
-    struct UserState* ustate = get_player_user_state(player);
-    if (user_state_invalid(ustate))
-        return;
     struct Thing* heartng = get_player_soul_container(player->id_number);
-    ustate->dungeon_camera.x = heartng->mappos.x.val;
-    ustate->dungeon_camera.y = heartng->mappos.y.val;
-    ustate->dungeon_camera.yaw[false] = DEGREES_45;
-    ustate->dungeon_camera.yaw[true] = 0;
+    for (NetUserId user = 0; user < MAX_NET_USERS; user++)
+    {
+        struct UserState *ustate = get_user_state(user);
+        if (ustate->player_id != player->id_number)
+            continue;
+        ustate->dungeon_camera.x = heartng->mappos.x.val;
+        ustate->dungeon_camera.y = heartng->mappos.y.val;
+        ustate->dungeon_camera.yaw[false] = DEGREES_45;
+        ustate->dungeon_camera.yaw[true] = 0;
+    }
     init_local_cameras(player);
 }
 
@@ -323,11 +326,10 @@ static int get_walking_bob_direction(struct Thing *thing)
     }
 }
 
-void update_first_person_position(struct Camera *cam, struct Thing *thing, int eye_height)
+void update_first_person_position(struct Camera *cam, struct Thing *thing, const struct CreatureControl *cctrl, int eye_height)
 {
-    if ( thing_is_creature(thing) )
+    if (thing->class_id == TCls_Creature)
     {
-        struct CreatureControl *cctrl = creature_control_get_from_thing(thing);
         const int32_t head_bob = (cctrl->move_speed && thing_touching_floor(thing)) ? 16 * get_walking_bob_direction(thing) : 0;
 
         int pos_x = move_coord_with_angle_x(thing->mappos.x.val,-90,thing->move_angle_xy);
@@ -497,8 +499,9 @@ static void update_player_camera_shake(struct PlayerInfo *player)
 {
     struct Dungeon *dungeon = get_players_dungeon(player);
 
-    if (((get_player_view_type(player) == PVT_CreatureContrl) || (get_player_view_type(player) == PVT_CreaturePasngr))
-     && (player->controlled_thing_idx <= 0) && (player->instance_num != PI_HeartZoom))
+    const struct UserState *ustate = get_player_primary_user_state(player);
+    if (!user_state_invalid(ustate) && (ustate->view_type == PVT_CreatureContrl || ustate->view_type == PVT_CreaturePasngr)
+     && ustate->controlled_thing_idx <= 0 && ustate->instance_num != PI_HeartZoom)
     {
         ERRORLOG("Cannot go first person without controlling creature");
     }

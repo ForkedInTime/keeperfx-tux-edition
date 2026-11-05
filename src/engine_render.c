@@ -54,6 +54,7 @@
 #include "engine_redraw.h"
 #include "engine_textures.h"
 #include "local_camera.h"
+#include "local_possession.h"
 #include "map_utils.h"
 #include "front_simple.h"
 #include "frontend.h"
@@ -211,8 +212,6 @@ long x_init_off;
 long y_init_off;
 long floor_pointed_at_x;
 long floor_pointed_at_y;
-long box_lag_compensation_x;
-long box_lag_compensation_y;
 
 static long fade_scaler;
 static long fade_way_out;
@@ -368,6 +367,7 @@ struct ThingInterpolateResult interpolate_thing(struct Thing *thing)
         result.mappos = thing->mappos;
         result.floor_height = thing->floor_height;
     }
+    offset_local_possession_shot(thing, &result.mappos);
 
     return result;
 }
@@ -490,7 +490,7 @@ static void update_normal_shade(struct M33 *matx)
       normal_shade_right = 0;
 }
 
-void update_engine_settings(struct PlayerInfo *player)
+void update_engine_settings(void)
 {
     switch (settings.video_detail_level)
     {
@@ -515,7 +515,7 @@ void update_engine_settings(struct PlayerInfo *player)
     me_pointed_at = NULL;
     me_distance = 100000000;
     max_i_can_see = get_max_i_can_see_from_settings();
-    const struct UserState *ustate = get_local_user_state();
+    const struct UserState *ustate = get_local_user_state_prediction();
     if ((lens_mode != 0) || user_state_invalid(ustate))
       temp_cluedo_mode = 0;
     else
@@ -2216,14 +2216,13 @@ static void fiddle_gamut_set_minmaxes(int32_t *floor_x, int32_t *floor_y, long m
  */
 static void fiddle_gamut(long pos_x, long pos_y)
 {
-    struct PlayerInfo *player = get_my_player();
-    struct Camera *camera = get_local_active_camera(player);
+    struct Camera *camera = get_local_active_camera();
     long ewwidth;
     long ewheight;
     long ewzoom;
     int32_t floor_x[4];
     int32_t floor_y[4];
-    const unsigned char view_type = get_local_view_type(player);
+    const unsigned char view_type = get_local_view_type();
     if ((view_type == PVT_CreatureContrl) || (view_type == PVT_CreaturePasngr))
     {
         fiddle_half_gamut(pos_x, pos_y, 1, cells_away);
@@ -2731,8 +2730,8 @@ static void process_isometric_map_volume_box(long x, long y, long z, PlayerNumbe
     unsigned char default_color = map_volume_box.color;
     unsigned char line_color = default_color;
     struct PlayerInfo* current_player = get_player(plyr_idx);
-    struct UserState* ustate = get_local_user_state();
-    const struct RoomSpace *render_roomspace = get_dig_prediction_render_roomspace(&ustate->render_roomspace);
+    const struct UserState *ustate = get_user_state_prediction(get_displayed_user());
+    const struct RoomSpace *render_roomspace = &ustate->render_roomspace;
     // Check if a roomspace is currently being built
     // and if so feed this back to the user
     if ((current_player->roomspace.is_active) && ((ustate->work_state == PSt_Sell) || (ustate->work_state == PSt_BuildRoom)))
@@ -2744,20 +2743,20 @@ static void process_isometric_map_volume_box(long x, long y, long z, PlayerNumbe
         if (render_roomspace->is_roomspace_a_box)
         {
             // This is a basic square box
-            create_map_volume_box(x + box_lag_compensation_x, y + box_lag_compensation_y, z, line_color);
+            create_map_volume_box(x, y, z, line_color);
         }
         else
         {
             // This is a "2-line" square box
             // i.e. an "accurate" box with an outer square box
             map_volume_box.color = line_color;
-            create_fancy_map_volume_box(*render_roomspace, x + box_lag_compensation_x, y + box_lag_compensation_y, z, (render_roomspace->slab_count == 0) ? SLC_RED : SLC_BROWN, true);
+            create_fancy_map_volume_box(*render_roomspace, x, y, z, (render_roomspace->slab_count == 0) ? SLC_RED : SLC_BROWN, true);
         }
     }
     else
     {
         // This is an "accurate"/"automagic" box
-        create_fancy_map_volume_box(*render_roomspace, x + box_lag_compensation_x, y + box_lag_compensation_y, z, line_color, false);
+        create_fancy_map_volume_box(*render_roomspace, x, y, z, line_color, false);
     }
     map_volume_box.color = default_color;
 }
@@ -4827,7 +4826,6 @@ void draw_map_volume_box(long cor1_x, long cor1_y, long cor2_x, long cor2_y, lon
   */
 static void process_keeper_flame_on_sprite(struct BucketKindJontySprite* jspr, long angle, long base_sprite_size)
 {
-    struct PlayerInfo* player = get_my_player();
     struct Thing* thing = jspr->thing;
     struct ObjectConfigStats* objst;
     struct TrapConfigStats* trapst;
@@ -4857,7 +4855,7 @@ static void process_keeper_flame_on_sprite(struct BucketKindJontySprite* jspr, l
         scale = (flame.sprite_size * base_sprite_size / thing->sprite_size);
     }
 
-    if (get_local_view_type(player) == PVT_DungeonTop)
+    if (get_local_view_type() == PVT_DungeonTop)
     {
         add_x = (base_sprite_size * flame.td_add_x) >> 5;
         add_y = (base_sprite_size * flame.td_add_y) >> 5;
@@ -4912,8 +4910,7 @@ void draw_fastview_mapwho(struct Camera *cam, struct BucketKindJontySprite *jspr
 {
     unsigned short flg_mem;
     unsigned char alpha_mem;
-    const struct PlayerInfo *player = get_displayed_player();
-    const struct UserState *ustate = get_player_user_state(player);
+    const struct UserState *ustate = get_user_state(get_displayed_user());
     struct ObjectConfigStats* objst;
     struct Thing *thing = jspr->thing;
     unsigned short animation_sprite;
@@ -5065,7 +5062,6 @@ void draw_fastview_mapwho(struct Camera *cam, struct BucketKindJontySprite *jspr
 
 void draw_engine_number(struct BucketKindFloatingGoldText *num)
 {
-    struct PlayerInfo *player;
     unsigned short flg_mem;
     const struct TbSprite *spr;
     long remaining_digits;
@@ -5078,12 +5074,11 @@ void draw_engine_number(struct BucketKindFloatingGoldText *num)
     float scale_by_zoom = LbLerp(0.15, 1.00, hud_scale);
 
     flg_mem = RendererGetDrawFlags();
-    player = get_my_player();
     RendererClearDrawFlags(Lb_SPRITE_FLIP_HORIZ);
     spr = get_button_sprite(GBS_fontchars_number_dig0);
     w = scale_ui_value(spr->SWidth) * scale_by_zoom;
     h = scale_ui_value(spr->SHeight) * scale_by_zoom;
-    struct Camera *active_cam = get_local_active_camera(player);
+    struct Camera *active_cam = get_local_active_camera();
     if (active_cam != NULL && (active_cam->view_mode == PVM_IsoWibbleView || active_cam->view_mode == PVM_FrontView || active_cam->view_mode == PVM_IsoStraightView)) {
         // Count digits to be displayed
         ndigits=0;
@@ -5113,8 +5108,7 @@ void draw_engine_room_flagpole(struct BucketKindRoomFlag *rflg)
     if (!room_exists(room) || !room_can_have_ensign(room->kind)) {
         return;
     }
-    struct PlayerInfo *player = get_my_player();
-    const struct Camera *cam = get_local_active_camera(player);
+    const struct Camera *cam = get_local_active_camera();
 
     if (
         cam->view_mode == PVM_IsoWibbleView ||
@@ -5273,7 +5267,7 @@ void fill_status_sprite_indexes(struct Thing *thing, struct CreatureControl *cct
 void draw_status_sprites(long scrpos_x, long scrpos_y, struct Thing *thing)
 {
     struct PlayerInfo *player = get_my_player();
-    const struct Camera *cam = get_local_active_camera(player);
+    const struct Camera *cam = get_local_active_camera();
     if (cam == NULL)
     {
         return;
@@ -5281,7 +5275,7 @@ void draw_status_sprites(long scrpos_x, long scrpos_y, struct Thing *thing)
 
     float scale_by_zoom;
     int base_size = creature_status_size * 256;
-    const unsigned char view_type = get_local_view_type(player);
+    const unsigned char view_type = get_local_view_type();
     if (view_type == PVT_MapScreen)
     {
         scale_by_zoom = 1;
@@ -5512,8 +5506,7 @@ void draw_engine_room_flag_top(struct BucketKindRoomFlag *rflg)
     if (!room_exists(room) || !room_can_have_ensign(room->kind)) {
         return;
     }
-    struct PlayerInfo *player = get_my_player();
-    const struct Camera *cam = get_local_active_camera(player);
+    const struct Camera *cam = get_local_active_camera();
 
     if (
         cam->view_mode == PVM_IsoWibbleView ||
@@ -6543,7 +6536,6 @@ static void draw_subdivided_near_polygon(struct BucketKindPolygonNearFP *polygon
 }
 void display_drawlist(void) // Draws isometric and 1st person view. Not frontview.
 {
-    struct PlayerInfo *player;
     const struct Camera *cam;
     union {
         struct BasicQ *b;
@@ -6612,8 +6604,7 @@ void display_drawlist(void) // Draws isometric and 1st person view. Not frontvie
                 draw_engine_room_flagpole(item.roomFlag);
                 break;
             case QK_JontyISOSprite: // Spinning key
-                player = get_my_player();
-                cam = get_local_active_camera(player);
+                cam = get_local_active_camera();
                 if (cam != NULL)
                 {
                     if (cam->view_mode == PVM_IsoWibbleView || cam->view_mode == PVM_IsoStraightView) {
@@ -6817,7 +6808,7 @@ void draw_view(struct Camera *cam, unsigned char a2)
 
     draw_view_map_plane(cam, aposc, bposc, xcell, ycell);
 
-    if (map_volume_box.visible && should_draw_cursor_box(my_player_number)) {
+    if (map_volume_box.visible && should_draw_cursor_box(get_displayed_user())) {
         poly_pool_end_reserve(0);
         process_isometric_map_volume_box(x, y, z, my_player_number);
     }
@@ -7031,7 +7022,7 @@ static TbBool convert_world_coord_to_front_view_screen_coord(struct Coord3d* pos
 
 TbBool map_to_screen(struct Coord3d *pos, int32_t *screen_x, int32_t *screen_y)
 {
-    struct Camera *cam = get_local_active_camera(get_my_player());
+    struct Camera *cam = get_local_active_camera();
     int32_t x;
     int32_t y;
     if (cam->view_mode == PVM_FrontView) {
@@ -7801,7 +7792,6 @@ static void draw_single_keepersprite(long kspos_x, long kspos_y, struct KeeperSp
 void process_keeper_sprite(short x, short y, unsigned short kspr_base, short kspr_angle, unsigned char sprgroup, long scale)
 {
     struct KeeperSprite *creature_sprites;
-    struct PlayerInfo *player;
     struct CreatureControl *cctrl;
     struct KeeperSprite *kspr;
     long kspr_idx;
@@ -7818,7 +7808,6 @@ void process_keeper_sprite(short x, short y, unsigned short kspr_base, short ksp
     long sprite_rot;
     long cutoff;
     SYNCDBG(17, "At (%d,%d) opts %d %d %d %d", (int)x, (int)y, (int)kspr_base, (int)kspr_angle, (int)sprgroup, (int)scale);
-    player = get_my_player();
     creature_sprites = keepersprite_array(kspr_base);
     if (creature_sprites == NULL) {
         return;
@@ -7877,7 +7866,7 @@ void process_keeper_sprite(short x, short y, unsigned short kspr_base, short ksp
             lltemp = dim_oh * (48 - (long)cctrl->sacrifice.animation_counter);
             cutoff = ((((lltemp >> 24) & 0x1F) + (long)lltemp) >> 5) / 2;
         }
-        if ((get_local_view_type(player) == PVT_CreatureContrl) || (get_local_view_type(player) == PVT_CreaturePasngr))
+        if ((get_local_view_type() == PVT_CreatureContrl) || (get_local_view_type() == PVT_CreaturePasngr))
         {
             water_source_cutoff = cutoff;
             water_y_offset = (2 * scale * cutoff) >> 5;
@@ -7983,8 +7972,7 @@ static void prepare_jonty_remap_and_scale(int32_t *scale, const struct BucketKin
 static void draw_mapwho_ariadne_path(struct Thing *thing)
 {
     // Don't draw debug pathfinding lines in Possession to avoid crash
-    struct PlayerInfo *player = get_my_player();
-    if ((get_local_view_type(player) == PVT_CreatureContrl) || (get_local_view_type(player) == PVT_CreaturePasngr))
+    if ((get_local_view_type() == PVT_CreatureContrl) || (get_local_view_type() == PVT_CreaturePasngr))
         return;
 
     struct Ariadne *arid;
@@ -8020,7 +8008,7 @@ void draw_jonty_mapwho(struct BucketKindJontySprite *jspr)
     unsigned short flg_mem;
     unsigned char alpha_mem;
     const struct PlayerInfo *player = get_displayed_player();
-    const struct UserState *ustate = get_player_user_state(player);
+    const struct UserState *ustate = get_user_state(get_displayed_user());
     struct Thing *thing = jspr->thing;
     unsigned short animation_sprite;
     unsigned char current_frame;
@@ -8061,15 +8049,15 @@ void draw_jonty_mapwho(struct BucketKindJontySprite *jspr)
     if (!thing_is_invalid(thing))
     {
         if ((local_state.local_thing_under_hand == thing->index) && ((get_gameturn() % (4 * gui_blink_rate)) >= 2 * gui_blink_rate)) {
-          struct Camera *active_cam = get_local_active_camera(get_my_player());
+          struct Camera *active_cam = get_local_active_camera();
           if ((active_cam != NULL) && (active_cam->view_mode == PVM_IsoWibbleView || active_cam->view_mode == PVM_IsoStraightView))
           {
               RendererAddDrawFlags(Lb_SPRITE_REMAP);
               lbSpriteReMapPtr = white_pal;
           }
-          else if ((get_local_view_type(player) == PVT_CreatureContrl) || (get_local_view_type(player) == PVT_CreaturePasngr))
+          else if (get_displayed_view_type() == PVT_CreatureContrl || get_displayed_view_type() == PVT_CreaturePasngr)
           {
-              struct Thing *creatng = thing_get(player->influenced_thing_idx);
+              struct Thing *creatng = thing_get(ustate->influenced_thing_idx);
               if (thing_is_creature(creatng))
               {
                   struct CreatureControl* cctrl = creature_control_get_from_thing(creatng);
@@ -8495,14 +8483,14 @@ void create_frontview_map_volume_box(struct Camera *cam, unsigned char stl_width
     int32_t coord_y;
     int32_t coord_z;
     long box_width, box_height;
-    pos.y.val = map_volume_box.end_y - box_lag_compensation_y;
-    pos.x.val = map_volume_box.end_x - box_lag_compensation_x;
+    pos.y.val = map_volume_box.end_y;
+    pos.x.val = map_volume_box.end_x;
     pos.z.val = subtile_coord(5,0);
     convert_world_coord_to_front_view_screen_coord(&pos, cam, &coord_x, &coord_y, &coord_z);
     box_width = coord_x;
     box_height = coord_y;
-    pos.y.val = map_volume_box.beg_y - box_lag_compensation_y;
-    pos.x.val = map_volume_box.beg_x - box_lag_compensation_x;
+    pos.y.val = map_volume_box.beg_y;
+    pos.x.val = map_volume_box.beg_x;
     convert_world_coord_to_front_view_screen_coord(&pos, cam, &coord_x, &coord_y, &coord_z);
     box_width -= coord_x;
     box_height -= coord_y;
@@ -8559,14 +8547,14 @@ void create_fancy_frontview_map_volume_box(struct RoomSpace roomspace, struct Ca
     valid_slabs.beg_y = subtile_coord((roomspace.top * 3), 0);
     valid_slabs.end_x = subtile_coord((3*1) + (roomspace.right * 3), 0);
     valid_slabs.end_y = subtile_coord(((3*1) + roomspace.bottom * 3), 0);
-    pos.y.val = valid_slabs.end_y - box_lag_compensation_y;
-    pos.x.val = valid_slabs.end_x - box_lag_compensation_x;
+    pos.y.val = valid_slabs.end_y;
+    pos.x.val = valid_slabs.end_x;
     pos.z.val = subtile_coord(5,0);
     convert_world_coord_to_front_view_screen_coord(&pos, cam, &coord_x, &coord_y, &coord_z);
     box_width = coord_x;
     box_height = coord_y;
-    pos.y.val = valid_slabs.beg_y - box_lag_compensation_y;
-    pos.x.val = valid_slabs.beg_x - box_lag_compensation_x;
+    pos.y.val = valid_slabs.beg_y;
+    pos.x.val = valid_slabs.beg_x;
     convert_world_coord_to_front_view_screen_coord(&pos, cam, &coord_x, &coord_y, &coord_z);
     box_width -= coord_x;
     box_height -= coord_y;
@@ -8731,8 +8719,8 @@ static void process_frontview_map_volume_box(struct Camera *cam, unsigned char s
     unsigned char default_color = map_volume_box.color;
     unsigned char line_color = default_color;
     struct PlayerInfo* current_player = get_player(plyr_idx);
-    struct UserState* ustate = get_local_user_state();
-    const struct RoomSpace *render_roomspace = get_dig_prediction_render_roomspace(&ustate->render_roomspace);
+    const struct UserState *ustate = get_user_state_prediction(get_displayed_user());
+    const struct RoomSpace *render_roomspace = &ustate->render_roomspace;
     // Check if a roomspace is currently being built
     // and if so feed this back to the user
     if ((current_player->roomspace.is_active) && ((ustate->work_state == PSt_Sell) || (ustate->work_state == PSt_BuildRoom)))
@@ -8764,8 +8752,15 @@ static void process_frontview_map_volume_box(struct Camera *cam, unsigned char s
 
 TbBool cursor_on_room(RoomIndex room_index)
 {
-    const struct UserState *ustate = get_player_user_state(get_displayed_player());
-    struct SlabMap* slb = get_slabmap_for_subtile(ustate->cursor_subtile_x, ustate->cursor_subtile_y);
+    const struct UserState *ustate = get_user_state(get_displayed_user());
+    MapSubtlCoord stl_x = ustate->cursor_subtile_x;
+    MapSubtlCoord stl_y = ustate->cursor_subtile_y;
+    const struct Packet *pckt = get_local_packet();
+    if (is_my_player(get_displayed_player()) && ((pckt->control_flags & PCtr_MapCoordsValid) != 0)) {
+        stl_x = coord_subtile(pckt->pos_x);
+        stl_y = coord_subtile(pckt->pos_y);
+    }
+    struct SlabMap* slb = get_slabmap_for_subtile(stl_x, stl_y);
     if (slabmap_block_invalid(slb)) {
         return false;
     }
@@ -8784,7 +8779,7 @@ TbBool room_is_damaged(RoomIndex room_index)
 }
 TbBool placing_same_room_type(RoomIndex room_index)
 {
-    const struct UserState *ustate = get_player_user_state(get_displayed_player());
+    const struct UserState *ustate = get_user_state_prediction(get_displayed_user());
     if (map_volume_box.visible == 0) {
         return false;
     }
@@ -9163,7 +9158,7 @@ void draw_frontview_engine(struct Camera *cam)
 
     update_frontview_pointed_block(zoom, qdrant, px, py, qx, qy);
     update_local_mouse_light();
-    if (map_volume_box.visible && should_draw_cursor_box(my_player_number)) {
+    if (map_volume_box.visible && should_draw_cursor_box(get_displayed_user())) {
         process_frontview_map_volume_box(cam, ((zoom >> 8) & 0xFF), player->id_number);
     }
 

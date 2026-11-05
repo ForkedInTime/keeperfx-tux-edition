@@ -390,11 +390,11 @@ static int64_t get_datatype_min(uchar type)
         case dt_uint:
             return 0;
         case dt_long:
-            return INT32_MIN;
+            return LONG_MIN;
         case dt_ulong:
             return 0;
         case dt_longlong:
-            return INT64_MIN;
+            return LLONG_MIN;
         case dt_ulonglong:
             return 0;
         default:
@@ -423,13 +423,13 @@ static int64_t get_datatype_max(uchar type)
         case dt_uint:
             return UINT_MAX;
         case dt_long:
-            return INT32_MAX;
+            return LONG_MAX;
         case dt_ulong:
-            return UINT32_MAX;
+            return ULONG_MAX > INT64_MAX ? INT64_MAX : (int64_t)ULONG_MAX;
         case dt_longlong:
-            return INT64_MAX;
+            return LLONG_MAX;
         case dt_ulonglong:
-            return UINT64_MAX;
+            return ULLONG_MAX;
         default:
             break;
     }
@@ -806,7 +806,7 @@ void assign_default(const struct NamedField* named_field, int64_t value, const s
             *(unsigned long *)field = (unsigned long)value;
         break;
     case dt_longlong:
-        if (value < INT64_MIN || value > INT64_MAX)
+        if (value < LLONG_MIN || value > LLONG_MAX)
             NAMFIELDWRNLOG("Value out of range for signed long long: %" PRId64, value);
         else {
             /* Use memcpy to avoid ARM STRD strict-alignment fault (ARMv7 STRD requires

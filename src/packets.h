@@ -31,6 +31,8 @@ extern "C" {
 #endif
 /******************************************************************************/
 struct Camera;
+struct CreatureControl;
+struct UserState;
 struct Packet;
 struct PlayerInfo;
 struct Thing;
@@ -58,13 +60,13 @@ enum TbPacketAction {
         PckA_UnusedSlot018,
         PckA_UnusedSlot019,
         PckA_ToggleLights,//20
-        PckA_SwitchScrnRes,
+        PckA_UnusedSlot021,
         PckA_TogglePause,
         PckA_UnusedSlot023,
         PckA_SetUserPref,
-        PckA_ChangeWindowSize,//25
+        PckA_UnusedSlot025,//25
         PckA_BookmarkLoad,
-        PckA_SetGammaLevel,
+        PckA_UnusedSlot027,
         PckA_UnusedSlot028,
         PckA_SetMapRotation,
         PckA_UnusedSlot030,//30
@@ -288,7 +290,7 @@ struct Packet {
     uint32_t control_flags;
     uint8_t additional_packet_values; // uses the flags and values from TbPacketAddValues
     
-    // union on packet_action_has_camera_position()
+    // union on packet_action_has_camera_position(); in first person, cam_x holds the attack target
     union
     {
         uint16_t cam_x;
@@ -327,8 +329,9 @@ void unset_packet_control(struct Packet *pckt, unsigned long flag);
 void unset_players_packet_control(struct PlayerInfo *player, unsigned long flag);
 void set_players_packet_position(struct Packet *pckt, long x, long y, unsigned char context);
 void set_packet_pause_toggle(void);
-struct Thing *get_thing_under_hand(struct PlayerInfo *player, MapCoord x, MapCoord y);
+struct Thing *get_thing_under_hand(NetUserId user, MapCoord x, MapCoord y);
 TbBool process_dungeon_control_packet_clicks(NetUserId user);
+TbBool process_dungeon_control_packet_spell_overcharge(NetUserId user, const struct Packet *pckt);
 TbBool process_user_dungeon_control_packet_action(NetUserId user);
 void process_user_creature_control_packet_control(NetUserId user);
 void process_user_creature_passenger_packet_action(NetUserId user);
@@ -336,18 +339,26 @@ void process_user_creature_control_packet_action(NetUserId user);
 void process_map_packet_clicks(NetUserId user);
 void process_pause_packet(long a1, long a2);
 TbBool process_user_global_packet_action(NetUserId user);
+void apply_user_pref_packet_action(struct UserState *ustate, const struct Packet *pckt);
+void apply_first_person_packet_action(struct UserState *ustate, const struct Packet *pckt);
+void apply_creature_input_packet_values(struct UserState *ustate, const struct Packet *pckt);
 void clear_users_button_state(void);
-void process_camera_view_controls(struct Camera* cam, const struct Packet* pckt, struct PlayerInfo* player);
+void process_camera_view_controls(struct Camera* cam, const struct Packet* pckt, const struct UserState *ustate);
 TbBool packet_action_has_camera_position(enum TbPacketAction action);
 unsigned char packet_camera_context(const struct Packet *pckt);
 void packet_set_camera_context(struct Packet *pckt, unsigned char cam_idx);
 void packet_set_camera_position(struct Packet *pckt, MapCoord x, MapCoord y);
 void packet_clear_camera_position(struct Packet *pckt);
 TbBool packet_get_camera_position(const struct Packet *pckt, MapCoord *x, MapCoord *y);
-int32_t camera_move_rate(const struct Camera* cam, const struct PlayerInfo* player, TbBool speedup);
+void packet_set_possession_target(struct Packet *pckt, ThingIndex target_idx);
+TbBool packet_get_possession_target(const struct Packet *pckt, ThingIndex *target_idx);
+int32_t camera_move_rate(const struct Camera* cam, const struct UserState *ustate, TbBool speedup);
 void process_camera_action(struct Camera cams[], const struct Packet* pckt);
 void process_first_person_look(struct Thing *thing, int32_t turn_x, int32_t turn_y, int32_t current_horizontal, int32_t current_vertical, int32_t *out_horizontal, int32_t *out_vertical, int32_t *out_roll);
 TbBool can_process_creature_input(struct Thing *thing);
+void apply_creature_movement_controls(struct Thing *thing, struct CreatureControl *cctrl, const struct Packet *pckt);
+CrInstance get_packet_triggered_instance(const struct Thing *thing, const struct CreatureControl *cctrl, const struct Packet *pckt);
+CrInstance get_packet_instant_instance(const struct Packet *pckt);
 enum PacketExchangeResult {
     PExR_Advance,
     PExR_Wait,

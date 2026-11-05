@@ -297,8 +297,7 @@ struct RoomSpace check_slabs_in_roomspace(struct RoomSpace roomspace, short rkin
         roomspace.is_roomspace_a_box = (roomspace.slab_count == 0); // don't need a "fancy" roomspace for a room with no valid slabs
         roomspace.render_roomspace_as_box = roomspace.is_roomspace_a_box;
     }
-    struct PlayerInfo* player = get_player(roomspace.plyr_idx);
-    if (get_player_user_state(player)->roomspace_mode != drag_placement_mode) // don't alter the roomspace in drag mode
+    if (get_user_state(roomspace.user)->roomspace_mode != drag_placement_mode) // don't alter the roomspace in drag mode
     {
         if ((roomspace.slab_count == 0) || (roomspace.slab_count > MAX_USER_ROOMSPACE_WIDTH * MAX_USER_ROOMSPACE_WIDTH))
         {
@@ -857,7 +856,7 @@ void get_dungeon_build_user_roomspace(struct RoomSpace *roomspace, NetUserId use
             temp_best_room = create_box_roomspace(best_roomspace, 1, 1, slb_x, slb_y);
         }
         if (temp_best_room.drag_mode && room_role_matches(rkind,RoRoF_PassWater|RoRoF_PassLava|RoRoF_PassAbyss)) {
-            detect_bridge_shape(plyr_idx, &temp_best_room);
+            detect_bridge_shape(user, &temp_best_room);
         }
         temp_best_room = check_slabs_in_roomspace(temp_best_room, roomst->cost);
         best_roomspace = temp_best_room;
@@ -888,10 +887,9 @@ void get_dungeon_build_user_roomspace(struct RoomSpace *roomspace, NetUserId use
 
 TbBool update_dungeon_build_roomspace_preview(NetUserId user, MapSubtlCoord stl_x, MapSubtlCoord stl_y)
 {
-    struct PlayerInfo *player = get_user_player(user);
     struct UserState* ustate = get_user_state(user);
     ustate->full_slab_cursor = 1;
-    if (is_my_player(player)) {
+    if (is_local_user(user)) {
         gui_room_type_highlighted = ustate->chosen_room_kind;
     }
     get_dungeon_build_user_roomspace(&ustate->render_roomspace, user, ustate->chosen_room_kind, stl_x, stl_y, ustate->roomspace_mode);
@@ -900,7 +898,6 @@ TbBool update_dungeon_build_roomspace_preview(NetUserId user, MapSubtlCoord stl_
 
 TbBool update_dungeon_sell_roomspace_preview(NetUserId user, MapSubtlCoord stl_x, MapSubtlCoord stl_y)
 {
-    PlayerNumber plyr_idx = get_net_user_player_number(user);
     struct UserState* ustate = get_user_state(user);
     if (ustate->roomspace_mode != single_subtile_mode) {
         ustate->full_slab_cursor = 1;
@@ -908,7 +905,7 @@ TbBool update_dungeon_sell_roomspace_preview(NetUserId user, MapSubtlCoord stl_x
         ustate->full_slab_cursor = 0;
     }
     get_dungeon_sell_user_roomspace(&ustate->render_roomspace, user, stl_x, stl_y);
-    return tag_cursor_blocks_sell_area(plyr_idx, stl_x, stl_y, ustate->full_slab_cursor);
+    return tag_cursor_blocks_sell_area(user, stl_x, stl_y, ustate->full_slab_cursor);
 }
 
 void apply_roomspace_packet_action(NetUserId user, const struct Packet *pckt)
@@ -1192,7 +1189,7 @@ static void process_box_roomspace_inputs(struct Packet *pckt)
 
 void process_build_roomspace_inputs(PlayerNumber plyr_idx)
 {
-    const struct UserState* ustate = get_player_user_state_prediction(get_player(plyr_idx));
+    const struct UserState* ustate = get_local_user_state_prediction();
     struct Packet* pckt = get_local_packet() /* local input path */;
     if (room_role_matches(ustate->chosen_room_kind,RoRoF_PassLava|RoRoF_PassWater|RoRoF_PassAbyss)) {
         local_state.roomspace_size = DEFAULT_USER_ROOMSPACE_WIDTH;
@@ -1240,7 +1237,7 @@ void process_sell_roomspace_inputs(PlayerNumber plyr_idx)
 void process_highlight_roomspace_inputs(PlayerNumber plyr_idx)
 {
     struct PlayerInfo* player = get_player(plyr_idx);
-    const struct UserState* ustate = get_player_user_state_prediction(player);
+    const struct UserState* ustate = get_local_user_state_prediction();
     if (is_game_key_pressed(Gkey_BestRoomSpace, false, true)) {
         set_players_packet_action(player, PckA_SetRoomspaceHighlight, settings.highlight_mode ^ 1, settings.highlight_mode, 0, 0);
         reset_roomspace = true;
@@ -1316,7 +1313,7 @@ TbBool roomspace_can_build_room_at_slab(const struct RoomSpace *roomspace, MapSl
     if (!room_can_build_on_bridge_slab(rkind, slb->kind)) {
         return false;
     }
-    struct UserState* ustate = get_player_user_state(get_player(plyr_idx));
+    struct UserState* ustate = get_user_state(roomspace->user);
     if (ustate->roomspace_horizontal_first) {
         if (roomspace_liquid_path_is_blocked(plyr_idx, roomspace->drag_start_x, slb_x, roomspace->drag_start_y, 0)) {
             return false;
@@ -1375,9 +1372,9 @@ void detect_roomspace_direction(struct RoomSpace *roomspace)
     }
 }
 
-void detect_bridge_shape(PlayerNumber plyr_idx, const struct RoomSpace *roomspace)
+void detect_bridge_shape(NetUserId user, const struct RoomSpace *roomspace)
 {
-    struct UserState *ustate = get_player_user_state(get_player(plyr_idx));
+    struct UserState *ustate = get_user_state(user);
     if (roomspace->drag_end_x != roomspace->drag_start_x) {
         if (roomspace->drag_start_y == roomspace->drag_end_y) {
             ustate->roomspace_horizontal_first = true;

@@ -70,13 +70,12 @@ enum GUI_Menus {
   GMnu_FELEVEL_SELECT     = 40,
   GMnu_FECAMPAIGN_SELECT  = 41,
   GMnu_FEERROR_BOX        = 42,
-  GMnu_FEADD_SESSION      = 43,
   GMnu_MAPPACK_SELECT     = 44,
   GMnu_MSG_BOX            = 45,
   GMnu_SPELL2             = 46,
   GMnu_ROOM2              = 47,
   GMnu_TRAP2              = 48,
-  GMnu_MP_MAPPACK_SELECT  = 49,
+  GMnu_SKIRMISH_LOBBY     = 49,
   GMnu_DELETE_SAVE        = 50,
 };
 

@@ -47,6 +47,8 @@ enum NetJoinRejection {
     NetJoin_SpectatorsFull = 7,
     NetJoin_SpectatorsUnsupported = 8,
     NetJoin_SpectatorDesynced = 9,
+    NetJoin_MapMismatch = 10,
+    NetJoin_FxdataMismatch = 11,
     NetJoin_Count,
 };
 
@@ -91,6 +93,7 @@ struct TbNetworkSessionNameEntry {
     uint8_t spectators_enabled;
     uint8_t max_spectators;
     uint8_t spectator_count;
+    uint8_t rejoin_open;
 };
 
 struct TbNetworkPlayerEntry {
