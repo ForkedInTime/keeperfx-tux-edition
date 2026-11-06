@@ -23,6 +23,10 @@ on:
         type: choice
         options: [alpha, stable]
         default: alpha
+      launcher_branch:
+        description: 'Launcher branch to build (for testing one; a release always builds alpha, and other branches name the artifacts after themselves)'
+        type: string
+        default: alpha
 
 permissions:
   contents: write        # needed to attach the bundle to the release
@@ -31,7 +35,8 @@ env:
   CCACHE_DIR: ${{ github.workspace }}/.ccache
   CPM_SOURCE_CACHE: ${{ github.workspace }}/.cpm-cache
   LAUNCHER_REPO: https://github.com/ForkedInTime/keeperfx-launcher-qt-linux.git
-  LAUNCHER_BRANCH: alpha
+  # A release has no inputs and always builds the launcher's alpha branch
+  LAUNCHER_BRANCH: ${{ inputs.launcher_branch || 'alpha' }}
 
 jobs:
   # A release published with its assets already attached (the normal flow: build by
@@ -76,7 +81,15 @@ jobs:
 
       # Cloned before the cache steps below, which hash files from inside it.
       - name: Clone the launcher (its packaging/ provides the desktop entry and icon)
-        run: git clone --branch "$LAUNCHER_BRANCH" --depth 1 "$LAUNCHER_REPO" launcher
+        run: |
+          git clone --branch "$LAUNCHER_BRANCH" --depth 1 "$LAUNCHER_REPO" launcher
+          echo "Launcher: $LAUNCHER_BRANCH at $(git -C launcher log -1 --format='%h %s')"
+          # A build of another launcher branch is a test build: its artifacts say so, so
+          # they cannot be taken for a release's (artifact names cannot hold a slash)
+          if [ "$LAUNCHER_BRANCH" != alpha ]; then
+            echo "ARTIFACT_SUFFIX=-launcher-$(printf '%s' "$LAUNCHER_BRANCH" | tr -c 'A-Za-z0-9._-' '-')" >> "$GITHUB_ENV"
+            echo "::notice::Test build of launcher branch $LAUNCHER_BRANCH; not for a release"
+          fi
 
       - name: Install dependencies (launcher build + engine runtime libs + appimage tools)
         run: |
@@ -669,13 +682,13 @@ jobs:
       - name: Upload the AppImage (downloadable from this CI run)
         uses: actions/upload-artifact@v4
         with:
-          name: KeeperFX-Tux-Edition-AppImage
+          name: KeeperFX-Tux-Edition-AppImage${{ env.ARTIFACT_SUFFIX }}
           path: KeeperFX-Tux-Edition-x86_64.AppImage
 
       - name: Upload the full.7z update package (downloadable from this CI run)
         uses: actions/upload-artifact@v4
         with:
-          name: keeperfx-linux-alpha-full-7z
+          name: keeperfx-linux-alpha-full-7z${{ env.ARTIFACT_SUFFIX }}
           path: keeperfx-linux-alpha-x86_64-full.7z
 
       # Same-repo upload: the default GITHUB_TOKEN is scoped to this repo, so this

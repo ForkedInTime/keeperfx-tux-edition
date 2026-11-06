@@ -24,12 +24,26 @@ infers it.
 
 The launcher is a **separate repository**
 (`ForkedInTime/keeperfx-launcher-qt-linux`), and `build-appimage.yml` clones it at
-a fixed branch:
+a branch:
 
 ```yaml
-LAUNCHER_BRANCH: alpha
+LAUNCHER_BRANCH: ${{ inputs.launcher_branch || 'alpha' }}
 git clone --branch "$LAUNCHER_BRANCH" --depth 1 "$LAUNCHER_REPO" launcher
 ```
+
+A release always builds `alpha`. To try a launcher branch in a real AppImage
+before it is merged, run the workflow by hand with that branch; it attaches
+nothing to a release, and its artifacts carry the branch in their names
+(`KeeperFX-Tux-Edition-AppImage-launcher-<branch>`), so they cannot be taken for a
+release's:
+
+```bash
+gh workflow run build-appimage.yml --repo ForkedInTime/keeperfx-tux-edition \
+  --ref alpha -f launcher_branch=<branch>
+```
+
+The launcher repository used to keep its own copy of this workflow for that; it
+had drifted far from this one and is gone.
 
 Day-to-day launcher work happens on its **`master`**. So a release only carries
 launcher changes if `alpha` has been fast-forwarded to `master` first:
