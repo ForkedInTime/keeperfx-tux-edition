@@ -4,6 +4,50 @@ This tracks the changes in *this* fork on top of the KeeperFX team's `master`.
 Version numbers follow the engine build (`<major>.<minor>.<release>.<build>`), with
 `alpha` appended on the alpha channel and nothing appended on the stable one.
 
+## 1.4.0.6098 — 2026-11-06 — stable
+
+**Replaces 1.4.0.6088.** A point release: 1.4.0.6088 with this edition's fixes since, and one of the KeeperFX
+team's. The team's November changes (the 2026-11-05 sync) stay on the alpha channel until the next stable.
+
+- **Our own online lobby.** Internet games are listed and joined through this edition's own lobby server,
+  `lobby.keeperfx-tux.workers.dev`, and nothing goes to the KeeperFX team's servers any more. A `keeperfx.cfg`
+  that still names the team's lobby is switched over by itself, by the game and by the launcher. The lobby only
+  introduces the players to each other; the game runs directly between them, as before. Its list shows no
+  addresses: a host's address goes only to the player who joins. Online play is with players on the same
+  version of this edition. The team's Windows builds run a different simulation and could never join one.
+- **Gold dropped into a temple's pool is no longer swallowed.** It vanished without a word. Now the mentor
+  says *"This is no wishing well, Keeper."*, allies get the gold in multiplayer, and the temple counts it.
+  This is the team's own fix from 6 November, taken early with its author. Measured with two builds identical
+  but for the fix: the coins reach the pool in both, the message comes only with it.
+- **For game managers such as Lutris** (issue #60): `KFX_NO_DESKTOP_ENTRY=1` stops the AppImage writing a menu
+  entry and icon into the home folder. A menu entry you keep starts the game in the folder it was installed to
+  (`KFX_ALPHA_PREFIX`), where it used to set up a second, empty copy in `~/.local/share/keeperfx-alpha`. And a
+  newer AppImage keeps your `keeperfx.cfg`, adding any new settings, where it used to put every game setting
+  back to its default.
+- **The log is kept in a deep game folder.** With the game folder's path longer than about 130 characters
+  (inside a Lutris or Flatpak data folder, say), the game ran without a log and without keeping the previous
+  five. Measured at 177 and 297 characters.
+- **Lua sandbox:** a script could get back the debug functions the sandbox closes, through the names the save
+  serialiser keeps for them. Those names are gone. Maps still cannot load compiled code; this was the second
+  line of defence.
+- **More detail for an open bug:** when a worker turns up in a room that is not its own (*"Room ... is not
+  valid ROOM_ROLE_..."*), the warning now says how it got there, to find the cause of the bursts seen on
+  Burdened Imps.
+- **Launcher:** crash reports come to this edition's issue tracker. The dialog saves a zip and opens a
+  prefilled issue to attach it to, and sends nothing anywhere (it used to upload to keeperfx.net). The
+  Multiplayer tab shows our lobby.
+
+Saves are unchanged: same format as 1.4.0.6088, and saves go both ways (measured on Pandaemonium 4, whose
+script keeps Lua functions: a 1.4.0.6088 save loads here and a save from here loads in 1.4.0.6088, with no
+stubs and no Lua errors). Checked on this code, on hidden displays with no sound: two-player multiplayer by
+direct connection (19/19, no resync), every campaign's first level and all twenty of the original campaign on OpenGL (35/35, the same engine messages
+as 1.4.0.6088), the save, load and delete menus, the log in a 187-character folder and its rotation, the Lua
+sandbox probes (all three routes to the debug functions refused), every campaign's first level under
+AddressSanitizer and UndefinedBehaviorSanitizer (16/16, no memory errors, nothing in the changed code), the
+temple's pool (the message and the count with the coin that carries the gold, nothing on the floor beside it),
+and an online game between two copies on our lobby: both switched over from a `keeperfx.cfg` naming the team's
+lobby, the second found the first in Online Lobbies and joined by hole punching, and a level ran in step on both.
+
 ## 1.4.0.6088 — 2026-11-05 — stable
 
 **Replaces 1.4.0.6078.** The 1.4.0.6087 alpha, unchanged, as the stable release (details in its entry below):
