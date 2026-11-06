@@ -43,7 +43,15 @@
 #define MATCHMAKING_WS_SUFFIX "/ws"
 #define MATCHMAKING_IP_PREFIX "https://"
 #define MATCHMAKING_IP_SUFFIX "/ip"
-#define MATCHMAKING_HOST_DEFAULT "matchmaking.keeperfx.workers.dev"
+/* Our own lobby server; its code is lobby-server/ in this repository. */
+#define MATCHMAKING_HOST_DEFAULT "lobby.keeperfx-tux.workers.dev"
+
+/* The KeeperFX team's servers. This edition never contacts them: its builds
+ * cannot join their games anyway (a join needs exactly the same build), and their
+ * lobby announces every hosted game on their Discord. A config that still names
+ * one -- every keeperfx.cfg written before this edition had its own lobby does --
+ * gets ours instead, so players move over without touching their settings. */
+static const char *const retired_domains[] = {"keeperfx.workers.dev", "keeperfx.net"};
 
 TbBool matchmaking_enabled = true;
 char matchmaking_ws_url[MATCHMAKING_URL_MAX] = MATCHMAKING_WS_PREFIX MATCHMAKING_HOST_DEFAULT MATCHMAKING_WS_SUFFIX;
@@ -80,6 +88,22 @@ int matchmaking_session_count = 0;
 static int parse_punch_addresses(const VALUE *message, PunchAddresses *output);
 static void read_lobbies(const VALUE *message);
 
+/* Whether the first `length` characters of `host` are one of the retired
+ * domains or a name under one (any letter case). */
+static TbBool host_is_retired(const char *host, size_t length)
+{
+    for (size_t i = 0; i < sizeof(retired_domains) / sizeof(retired_domains[0]); i++) {
+        size_t domain_length = strlen(retired_domains[i]);
+        if (length < domain_length || SDL_strncasecmp(host + length - domain_length, retired_domains[i], domain_length) != 0) {
+            continue;
+        }
+        if (length == domain_length || host[length - domain_length - 1] == '.') {
+            return true;
+        }
+    }
+    return false;
+}
+
 void matchmaking_set_server(const char *host)
 {
     if (!host || !*host) {
@@ -95,6 +119,11 @@ void matchmaking_set_server(const char *host)
     size_t length = strlen(host);
     if (length > 0 && host[length - 1] == '/') {
         length--;
+    }
+    if (host_is_retired(host, length)) {
+        LbNetLog("Matchmaking: \"%.*s\" is the KeeperFX team's lobby, which this edition does not use; using \"%s\"\n", (int)length, host, MATCHMAKING_HOST_DEFAULT);
+        host = MATCHMAKING_HOST_DEFAULT;
+        length = strlen(host);
     }
     int lws = snprintf(matchmaking_ws_url, sizeof(matchmaking_ws_url), MATCHMAKING_WS_PREFIX "%.*s" MATCHMAKING_WS_SUFFIX, (int)length, host);
     int lip = snprintf(matchmaking_ip_url, sizeof(matchmaking_ip_url), MATCHMAKING_IP_PREFIX "%.*s" MATCHMAKING_IP_SUFFIX, (int)length, host);

@@ -96,6 +96,21 @@ session that went wrong survives starting the game again. The launcher shows it 
 Report bugs in this fork **[here](https://github.com/ForkedInTime/keeperfx-tux-edition/issues)**, with
 the log attached, and not to the KeeperFX team: they don't build or ship this edition.
 
+## Can I play online with friends on Windows?
+
+Not with this edition. Players of KeeperFX: Tux Edition play each other, and Windows players play each
+other on the official KeeperFX.
+
+Having the same maps isn't enough. In a multiplayer game the computers only send each other what each
+player did, and every computer works out the rest itself: where each creature walks, who wins each
+fight. That only works if every player runs exactly the same game code. This edition fixes bugs in that
+code, so the two would drift apart. The game refuses to join a different build for that reason, and the
+two editions also find games through different lobbies.
+
+To play with Windows friends, install the official Windows KeeperFX from
+[keeperfx.net](https://keeperfx.net) and run it under Wine, Lutris or Bottles. That is their software and
+their online service, separate from this edition.
+
 ## Why is my game folder called `keeperfx-alpha`?
 
 That was this project's first name, before it had a stable channel (the Flatpak's ID keeps it too).
