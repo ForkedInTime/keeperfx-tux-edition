@@ -60,6 +60,7 @@
 #include "player_computer.h"
 #include "thing_traps.h"
 #include "magic_powers.h"
+#include "power_process.h"
 #include "sounds.h"
 #include "config_sounds.h"
 #include "game_legacy.h"
@@ -4270,9 +4271,25 @@ TbBool creature_job_in_room_no_longer_possible_f(const struct Room *room, Creatu
     }
     if (!room_still_valid_as_type_for_thing(room, rrole, thing))
     {
-        WARNLOG("%s: Room %s index %d is not valid %s for %s owned by player %d to work in",
+        // This edition: the room is usually the one the creature stands on, so this fires when a
+        // creature is in a work state in the wrong room -- the "DUNGEON_HEART is not valid" bursts
+        // during a Call to Arms (2026-09-30, 2026-10-30) nobody could reproduce. Say how it got
+        // there: its states, where it is and is going, its rooms, the Call to Arms and the last drop.
+        const struct CreatureControl *cctrl = creature_control_get_from_thing(thing);
+        const struct Room *wrkroom = room_get(cctrl->work_room_id);
+        const struct Room *lastroom = room_get(cctrl->last_work_room_id);
+        WARNLOG("%s: Room %s index %d is not valid %s for %s index %d owned by player %d to work in"
+            " (state %s, continue %s, at %d,%d, going to %d,%d, work room %s %d, last %s %d,"
+            " called to arms %d, owner's CTA %d, dropped %ld turns ago)",
             func_name,room_code_name(room->kind),(int)room->index,room_role_code_name(rrole),
-            thing_model_name(thing),(int)thing->owner);
+            thing_model_name(thing),(int)thing->index,(int)thing->owner,
+            creature_state_code_name(thing->active_state),creature_state_code_name(thing->continue_state),
+            (int)thing->mappos.x.stl.num,(int)thing->mappos.y.stl.num,
+            (int)cctrl->moveto_pos.x.stl.num,(int)cctrl->moveto_pos.y.stl.num,
+            room_exists(wrkroom) ? room_code_name(wrkroom->kind) : "none",(int)cctrl->work_room_id,
+            room_exists(lastroom) ? room_code_name(lastroom->kind) : "none",(int)cctrl->last_work_room_id,
+            (int)cctrl->called_to_arms,(int)player_uses_power_call_to_arms(thing->owner),
+            (cctrl->dropped_turn != 0) ? (long)(get_gameturn() - cctrl->dropped_turn) : -1L);
         return true;
     }
     if (!creature_is_working_in_room(thing, room))
