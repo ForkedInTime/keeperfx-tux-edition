@@ -2417,11 +2417,11 @@ static short process_command_line(unsigned short argc, char *argv[])
 static void keep_previous_logs(const char *fname)
 {
     // The same full path LbErrorLogSetup() opens the log as.
-    char path[DISKPATH_SIZE];
+    char path[FULLPATH_SIZE];
     if ((LbFileMakeFullPath(1, "/", fname, path, sizeof(path)) != 1) || (LbFileLength(path) <= 0))
         return;
-    char older[DISKPATH_SIZE + 4];
-    char newer[DISKPATH_SIZE + 4];
+    char older[FULLPATH_SIZE + 4];
+    char newer[FULLPATH_SIZE + 4];
     snprintf(older, sizeof(older), "%s.%d", path, PREVIOUS_LOGS_KEPT);
     for (int i = PREVIOUS_LOGS_KEPT - 1; i > 0; i--)
     {
