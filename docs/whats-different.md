@@ -38,7 +38,7 @@ Wine, and the Linux-specific fixes, hardening and performance work below.
 > | 🧰 | **Launcher & tooling** — in-launcher Workshop browser + Installed manager, Mod Manager, Play ▾ menu, built-in updater with **separate stable and alpha channels**, side-by-side log viewer, the last five game logs kept, music download + recovery, single-instance lock, weekly sync bot, a weekly Arch library watch | 12+ items |
 >
 > <sub>Count it yourself: `git log --oneline --no-merges --invert-grep --grep='^Linux-Snapshot-Of:' upstream/master..HEAD`
-> — 468 commits on top of the team's master, snapshot commits excluded; 20 of them are the team's own fixes, taken ahead of a
+> — 478 commits on top of the team's master, snapshot commits excluded; 21 of them are the team's own fixes, taken ahead of a
 > sync, and keep their authors. The sections below are the line items.</sub>
 
 ## Every change, area by area
@@ -109,7 +109,8 @@ Wine, and the Linux-specific fixes, hardening and performance work below.
 - **The game keeps its last five logs.** Every start used to overwrite `keeperfx.log`, so whatever went wrong
   in one session was gone as soon as the game was started again. The log of the run before now moves to
   `keeperfx.log.1`, the one before that to `keeperfx.log.2`, and so on up to `keeperfx.log.5`; only the
-  oldest is dropped.
+  oldest is dropped. That holds in a deep game folder too: with its path longer than about 130 characters
+  (inside a Lutris or Flatpak data folder, say), the game used to run with no log at all.
 - **The High Score Table names the level.** Bullfrog's table printed a level *number*, which reads
   fine in the numbered original campaign and means nothing for a custom map, whose number is whatever
   id its author picked. Each row now shows the level's name, looked up in the campaign or map pack the
@@ -318,7 +319,8 @@ first.)
   itself for a literal like `1LL` (the team's issue #5567), and run precompiled bytecode, which LuaJIT does not
   check: through `loadstring`, a map's own `.lua` files, and the functions saved games and multiplayer resyncs
   carry. Here scripts read files and cannot change them, the FFI is gone, every loader takes source text only,
-  and scripts loaded after the game's own library get just `debug.traceback` and `debug.getinfo`. Saved games
+  and scripts loaded after the game's own library get just `debug.traceback` and `debug.getinfo` (the save
+  serialiser forgets its names for the rest, so it cannot hand them back). Saved games
   keep a script's functions as their source text instead of bytecode, so they also survive an edit to the
   script; saves from earlier versions are rebuilt from the scripts without their bytecode ever running.
 - **Hardened against crafted add-ons** — a multi-agent Linux audit found several out-of-bounds writes a
