@@ -23,9 +23,9 @@ struct lua_State;
  *  fresh state, after the standard libraries are open and before any script runs. */
 void lua_sandbox_open(struct lua_State *L);
 
-/** Leave scripts only debug.traceback and debug.getinfo. Call after the game's own Lua library
- *  (fxdata/lua/init.lua) has run, which keeps the parts it needs, and before campaign, map and
- *  mod scripts. */
+/** Leave scripts only debug.traceback and debug.getinfo, and drop the serialiser's names of the
+ *  functions they can no longer reach. Call after the game's own Lua library (fxdata/lua/init.lua)
+ *  has run, which keeps the parts it needs, and before campaign, map and mod scripts. */
 void lua_sandbox_close_debug(struct lua_State *L);
 
 /** Loads module name from file fname for require(), text only; a file of the game's own library
