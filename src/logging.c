@@ -235,8 +235,10 @@ int LbErrorLogSetup(const char *directory, const char *filename, TbBool flag)
     if (filename == NULL || strlen(filename) == 0) {
         filename = "error.log";
     }
-    char log_filename[DISKPATH_SIZE];
-    if (LbFileMakeFullPath(1, directory, filename, log_filename, DISKPATH_SIZE) != 1) {
+    // A full path, not DISKPATH_SIZE: the folder the game runs in can be deeper than that
+    // (an install inside a Lutris or Flatpak folder), and the log was then not written at all.
+    char log_filename[FULLPATH_SIZE];
+    if (LbFileMakeFullPath(1, directory, filename, log_filename, sizeof(log_filename)) != 1) {
         return -1;
     }
     ulong flags = (flag == 0) + 1;
@@ -423,14 +425,14 @@ int LbLogSetPrefixFmt(struct TbLog *log, const char *format, ...)
 int LbLogSetup(struct TbLog *log, const char *filename, ulong flags)
 {
     log->Initialised = false;
-    memset(log->filename, 0, DISKPATH_SIZE);
+    memset(log->filename, 0, sizeof(log->filename));
     memset(log->prefix, 0, LOG_PREFIX_LEN);
     log->Created = false;
     log->Suspended = false;
-    if (strlen(filename) >= DISKPATH_SIZE || strlen(filename) == 0) {
+    if (strlen(filename) >= sizeof(log->filename) || strlen(filename) == 0) {
         return -1;
     }
-    snprintf(log->filename, DISKPATH_SIZE, "%s", filename);
+    snprintf(log->filename, sizeof(log->filename), "%s", filename);
     log->flags = flags;
     log->Initialised = true;
     log->position = 0;
@@ -444,7 +446,7 @@ int LbLogClose(struct TbLog *log)
         SDL_UnlockMutex(log_mutex);
         return -1;
     }
-    memset(log->filename, 0, DISKPATH_SIZE);
+    memset(log->filename, 0, sizeof(log->filename));
     memset(log->prefix, 0, LOG_PREFIX_LEN);
     log->flags = 0;
     log->Initialised = false;
