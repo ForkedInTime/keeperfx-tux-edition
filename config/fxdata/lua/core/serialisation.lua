@@ -41,7 +41,7 @@ local function register_named_functions(source, prefix)
         if type(value) == "function" then
             if not registered_functions[value] then
                 binser.registerResource(value, path)
-                registered_functions[value] = true
+                registered_functions[value] = path
             end
         elseif type(value) == "table" then
             register_named_functions(value, path .. ".")
@@ -50,6 +50,44 @@ local function register_named_functions(source, prefix)
 end
 register_named_functions(_G, "global:")
 register_named_functions(registry, "registry:")
+
+-- This edition: the names above are taken while this library still has the whole debug library,
+-- and a name turns back into its function for anyone: binser.deserialize() of a resource record,
+-- binser.unregisterResource() and SetSerializedData() all hand it over, and campaign, map and mod
+-- scripts can require "external.binser" too. lua_sandbox_close_debug() (src/lua_sandbox.c) calls
+-- this once it has cut debug down for those scripts, so only what they can still reach keeps a
+-- name; everything else, the rest of the debug library, is no longer in a save's vocabulary.
+local function drop_unreachable_names()
+    local reachable, walked = {}, {}
+    local function walk(t)
+        if walked[t] then
+            return
+        end
+        walked[t] = true
+        for key, value in next, t do
+            if type(key) == "string" then
+                if type(value) == "function" then
+                    reachable[value] = true
+                elseif type(value) == "table" then
+                    walk(value)
+                end
+            end
+        end
+    end
+    walk(_G)
+    walk(registry)
+    local dropped = {}
+    for fn, path in pairs(registered_functions) do
+        if not reachable[fn] then
+            binser.unregisterResource(path)
+            registered_functions[fn] = nil
+            dropped[#dropped + 1] = path
+        end
+    end
+    table.sort(dropped)
+    return table.concat(dropped, " ")
+end
+registry["KeeperFX.serialisation.drop_unreachable_names"] = drop_unreachable_names
 
 -- FNV-1a, just to detect "this script text changed since the save" -- not a security hash.
 local function source_hash(text)
