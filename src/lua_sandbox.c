@@ -27,7 +27,11 @@
  *       copy, captured when they load. A campaign can supply a module of the same name that the
  *       game's init.lua then loads in its place, before the debug library is cut down; that
  *       module still loads no bytecode and reaches no FFI, which is what the cut-down debug
- *       library is a second line of defence for.
+ *       library is a second line of defence for. The game's serialiser names every function its
+ *       library can reach so a save can store C functions by name, and it took those names while
+ *       the whole debug library was still there; a name gives its function back to any script
+ *       (binser is a module scripts can require), so closing the library also drops the names of
+ *       what scripts can no longer reach.
  * @par Copying and copyrights:
  *     This program is free software; you can redistribute it and/or modify
  *     it under the terms of the GNU General Public License as published by
@@ -60,6 +64,8 @@ static const char sb_stdin_refused[] = "loadfile and dofile need a file name";
  *  debug library has been cut down for the scripts that load after it. */
 #define SB_LIBRARY_KEY "KeeperFX.sandbox.library"
 #define SB_CLOSED_KEY "KeeperFX.sandbox.closed"
+// set by fxdata/lua/core/serialisation.lua, called once by lua_sandbox_close_debug()
+#define SB_DROP_NAMES_KEY "KeeperFX.serialisation.drop_unreachable_names"
 
 /** A load's result as Lua's own loaders return it: the function, or nil and the message. */
 static int sb_load_result(lua_State *L, int status)
@@ -382,6 +388,23 @@ void lua_sandbox_close_debug(lua_State *L)
         lua_setfield(L, -2, "debug");
     }
     lua_pop(L, 2);
+    // The game's serialiser named every function its library could reach, the whole debug library
+    // included, and a name gives its function back to any script; keep only the names of what
+    // scripts can still reach (core/serialisation.lua)
+    lua_getfield(L, LUA_REGISTRYINDEX, SB_DROP_NAMES_KEY);
+    if (lua_isfunction(L, -1))
+    {
+        if (lua_pcall(L, 0, 1, 0) != 0)
+        {
+            ERRORLOG("Lua: could not drop the serialiser's names of closed functions: %s", lua_tostring(L, -1));
+        } else
+        {
+            SYNCDBG(7, "Lua: serialiser names dropped: %s", lua_tostring(L, -1));
+        }
+    }
+    lua_pop(L, 1);
+    lua_pushnil(L);
+    lua_setfield(L, LUA_REGISTRYINDEX, SB_DROP_NAMES_KEY);
 }
 
 int lua_sandbox_loadfile(lua_State *L, const char *fname)
