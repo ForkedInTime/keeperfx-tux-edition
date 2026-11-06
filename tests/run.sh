@@ -103,6 +103,11 @@ g++ -std=c++17 -Wall -Wextra $EXTRA_FLAGS -I"$ROOT_DIR/src" $(pkg-config --cflag
 	$(pkg-config --libs sdl3 luajit)
 "$ROOT_DIR/bin/test_lua_readonly" "$ROOT_DIR"
 
+# The test above checks the sandbox's own loaders; this checks nothing in the
+# engine goes around them. A direct luaL_loadfile and the like accepts bytecode,
+# so one such call added by an upstream merge (as #5582 does) fails here.
+sh "$ROOT_DIR/tests/check-lua-loads.sh"
+
 # The save format (upstream #5424): upstream's own codec and file tests, built
 # for this edition's 64-bit target. They round-trip a real struct Game through
 # the field tables and compare digests, so a table that reads differently here
