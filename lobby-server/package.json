@@ -1,0 +1,18 @@
+{
+	"name": "keeperfx-tux-lobby",
+	"version": "1.0.0",
+	"private": true,
+	"description": "Lobby server for KeeperFX: Tux Edition online multiplayer",
+	"license": "GPL-2.0-or-later",
+	"scripts": {
+		"dev": "wrangler dev",
+		"deploy": "wrangler deploy",
+		"check": "tsc --noEmit",
+		"test": "node test/protocol.test.mjs"
+	},
+	"devDependencies": {
+		"@cloudflare/workers-types": "5.20261106.1",
+		"typescript": "5.9.3",
+		"wrangler": "4.158.0"
+	}
+}

@@ -158,6 +158,12 @@ jobs:
         continue-on-error: true
         run: packaging/linux-only/check-tree.sh
 
+      - name: No address of the KeeperFX team's servers after the merge
+        id: servers
+        if: steps.merge.outputs.clean == 'true'
+        continue-on-error: true
+        run: packaging/ci/check-team-servers.sh
+
       - name: Install build deps
         if: steps.merge.outputs.clean == 'true'
         run: |
@@ -249,6 +255,7 @@ jobs:
           CLEAN: ${{ steps.merge.outputs.clean }}
           BRANCH: ${{ steps.merge.outputs.branch }}
           LINUXONLY: ${{ steps.linuxonly.outcome }}
+          SERVERS: ${{ steps.servers.outcome }}
           BUILD: ${{ steps.build.outcome }}
           TESTS: ${{ steps.tests.outcome }}
           PROOF: ${{ steps.proof.outcome }}
@@ -283,6 +290,11 @@ jobs:
           elif [ "$LINUXONLY" != success ]; then
             title="Upstream sync: Windows content survived the merge ($today)"
             problem="The merged tree fails \`packaging/linux-only/check-tree.sh\` -- see the run log."
+          elif [ "$SERVERS" != success ]; then
+            title="Upstream sync: the team's servers are back in the tree ($today)"
+            problem="The merge brings back an address of the KeeperFX team's servers
+          (\`packaging/ci/check-team-servers.sh\` -- see the run log). This edition sends
+          them nothing: point the setting at our own service or drop it before merging."
           elif [ "$BUILD" != success ]; then
             title="Upstream sync builds red ($today)"
             problem="The snapshot **merged cleanly but failed to build** -- see the run log."

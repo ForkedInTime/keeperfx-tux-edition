@@ -1,0 +1,14 @@
+// Cloudflare deployment of the KeeperFX: Tux Edition lobby server.
+// Deploy with `npm run deploy` after `npx wrangler login` (see README.md).
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "lobby",
+	"main": "src/index.ts",
+	"compatibility_date": "2025-11-01",
+	"durable_objects": {
+		"bindings": [{ "name": "LOBBY", "class_name": "Lobby" }]
+	},
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["Lobby"] }],
+	// No request logs: the server keeps nothing about who used it.
+	"observability": { "enabled": false }
+}

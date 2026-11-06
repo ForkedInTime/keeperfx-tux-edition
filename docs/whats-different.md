@@ -170,6 +170,23 @@ Wine, and the Linux-specific fixes, hardening and performance work below.
 - **Accessibility — launcher size.** Scale the whole launcher UI (100 %, 110 %, 125 % … up to 200 %) for
   readability.
 
+**Online multiplayer**
+- **Our own lobby server.** The game's Online list and the introduction that gets two players through their
+  home routers (UDP hole punching) run on this edition's own server, `lobby.keeperfx-tux.workers.dev`. Its
+  code is in [`lobby-server/`](../lobby-server/). The KeeperFX team's lobby is not used: a `keeperfx.cfg`
+  that still names it (every one written before November 2026) is switched to ours by the game and the
+  launcher, with nothing for the player to change. The server stores nothing and keeps no logs. The public
+  list carries no addresses: a host's address goes only to a player who asked to join that host, and back.
+  Games run directly between the players. Measured on 2026-11-06 with two copies of build 6155: the second
+  found the first in the list, joined through the lobby in 20 ms over IPv6, and a match on level 52 ran a
+  minute with no desync.
+- **Tux Edition plays Tux Edition.** A multiplayer join needs exactly the same build, and this edition's
+  fixes change the game's simulation, which every player's computer runs in lockstep. So Windows KeeperFX
+  and this edition can't play together, through any lobby
+  ([FAQ](faq.md#can-i-play-online-with-friends-on-windows)).
+- **Nothing to the team's servers, checked on every build.** `packaging/ci/check-team-servers.sh` fails
+  the release build, and the weekly sync's report, if their address comes back into the config or the code.
+
 **Linux performance** *(engine-level optimizations specific to this native build — upstream is Windows-first and does not tune the GCC/Linux path, so these are ours)*
 - **Frame pacing matched to your monitor, whatever its refresh rate.** The shipped default draws as fast as
   the processor allows — frames your display never shows, one core pinned at 100%, and, because the game runs
