@@ -647,6 +647,15 @@ TbBool delete_lair_totem(struct Thing *lairtng)
     return true;
 }
 
+static short possessed_food_peck_pitch(unsigned char timer)
+{
+    if (timer == 0)
+        return 0;
+    if (timer <= 3)
+        return DEGREES_360 - 116 * timer;
+    return (116 * timer + 1352) & ANGLE_MASK;
+}
+
 static long food_moves(struct Thing *objtng)
 {
     struct Coord3d pos;
@@ -662,9 +671,11 @@ static long food_moves(struct Thing *objtng)
     TbBool dirct_ctrl = is_thing_directly_controlled(objtng);
     if (dirct_ctrl)
     {
+        objtng->move_angle_z = 0;
         if (objtng->food.possession_startup_timer > 0)
         {
             objtng->food.possession_startup_timer--;
+            objtng->move_angle_z = possessed_food_peck_pitch(objtng->food.possession_startup_timer);
             return TUFRet_Modified;
         }
     }
