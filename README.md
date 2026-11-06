@@ -94,6 +94,10 @@ build; this edition is the Linux half they don't ship, plus the bugs found on th
   no longer costs a processor core.
 - 🧰 **Launcher** — Workshop browser, Mod Manager, and a built-in updater with separate stable and alpha
   channels.
+- 🌐 **Our own online lobby** — internet games are listed and connected through this edition's own small
+  server, which keeps nothing and gives your address only to the player joining you. Nothing goes to the
+  KeeperFX team's servers. Tux Edition plays Tux Edition: Windows KeeperFX can't join
+  ([why](docs/faq.md#can-i-play-online-with-friends-on-windows)).
 
 468 commits on top of the team's `master`. **[Everything, item by item »](docs/whats-different.md)**
 

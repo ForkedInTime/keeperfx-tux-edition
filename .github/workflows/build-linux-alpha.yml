@@ -91,6 +91,11 @@ jobs:
       - name: Check the save format against the tracked baseline
         run: packaging/ci/check-save-format.sh
 
+      # This edition sends nothing to the KeeperFX team's servers; a release
+      # that would (an upstream default slipped back in) stops here.
+      - name: Check nothing points at the KeeperFX team's servers
+        run: packaging/ci/check-team-servers.sh
+
       - name: Generate the UTF-8 fonts (needed since upstream #4920)
         run: |
           packaging/ci/make-fonts.sh
