@@ -33,12 +33,12 @@ Wine, and the Linux-specific fixes, hardening and performance work below.
 > | 🎮 | **Gameplay bugs found in players' games** — workers quitting a room they cross or step off, endless scavenger re-enrolment, imps and the computer repeating trips that cannot succeed, trap-crate and hatchery counts, rebirth, doors, explosions, abyss kills, the Call to Arms charge bar, script commands that missed the creatures already on the map, replays that fell a turn behind after a save, creatures choosing steps from leftover memory, and saves on levels that bring their own config files | ~30 fixes |
 > | 💥 | **Crash fixes** — ultrawide creature-possession, UTF-8 fonts, campaign scripts, clean exit, case-sensitive audio, the startup error dialog without libXrandr, Lua errors that closed the game, the creature-list corruption **root-fixed** | ~10 fixes |
 > | ⚡ | **Performance** — frame pacing matched to your monitor, cached parchment map view, per-turn CPU busy-spin, sprite/text blit, GUI hot paths, cached instant-load Workshop | 8 wins |
-> | 🎨 | **Graphics & audio** — upstream's OpenGL renderer built into the Linux binary and made the default (software when OpenGL cannot start), front-end movies in any codec, your own music in any filenames and any of OGG/FLAC/WAV/MP3, a real window icon and desktop identity on X11 *and* Wayland, artwork (and the game's text) regenerated from upstream's sources on every build | 5 items |
-> | 🌐 | **Multiplayer map packs** — the Classic, Modern and Original mappacks now load in every install method | 1 fix |
-> | 🧰 | **Launcher & tooling** — in-launcher Workshop browser + Installed manager, Mod Manager, Play ▾ menu, built-in updater with **separate stable and alpha channels**, side-by-side log viewer, the last five game logs kept, music download + recovery, single-instance lock, weekly sync bot, a weekly Arch library watch | 12+ items |
+> | 🎨 | **Graphics & audio** — upstream's OpenGL renderer built into the Linux binary and made the default (software when OpenGL cannot start), full sharpness on a scaled desktop, front-end movies in any codec and in full colour on either renderer, your own music in any filenames and any of OGG/FLAC/WAV/MP3, a real window icon and desktop identity on X11 *and* Wayland, artwork (and the game's text) regenerated from upstream's sources on every build | 6 items |
+> | 🌐 | **Multiplayer** — this edition's own lobby server (nothing goes to the team's servers, checked on every build), the Classic, Modern and Original mappacks loading in every install method, and two ways a game fell out of step closed with the team's fixes ahead of a sync | 4 items |
+> | 🧰 | **Launcher & tooling** — in-launcher Workshop browser + Installed manager, Mod Manager, Play ▾ menu, built-in updater with **separate stable and alpha channels**, side-by-side log viewer, the last five game logs kept, music download + recovery, single-instance lock, weekly sync bot, a weekly Arch library watch, a daily check for the team's later fixes to anything taken early | 13+ items |
 >
 > <sub>Count it yourself: `git log --oneline --no-merges --invert-grep --grep='^Linux-Snapshot-Of:' upstream/master..HEAD`
-> — 485 commits on top of the team's master, snapshot commits excluded; 23 of them are the team's own fixes, taken ahead of a
+> — 486 commits on top of the team's master, snapshot commits excluded; 23 of them are the team's own fixes, taken ahead of a
 > sync, and keep their authors. The sections below are the line items.</sub>
 
 ## Every change, area by area
@@ -50,6 +50,8 @@ Wine, and the Linux-specific fixes, hardening and performance work below.
   for a setting that is about the desktop's text. It now draws at the monitor's real resolution (measured on a
   125% desktop: 2752×1152 before, 3440×1440 now), a windowed mode is the stated number of pixels, and the mouse
   crosses the screen at the same speed as before.
+
+  ![The first level's tutorial text on a 125% desktop, zoomed 2× without smoothing: before 1.4.0.6087 the letters were drawn at 2752×1152 and stretched, so their strokes smear; 1.4.0.6103 draws them at the monitor's 3440×1440](assets/desktop-scale-before-after.png)
 - **Upstream's OpenGL renderer, in a Linux build you can download — and the default.** In September 2026
   upstream added an OpenGL backend — world, UI, sprites, shadows and lens effects drawn by the GPU. Their
   CMake build compiles it everywhere, but the only build they release is for Windows. This fork compiles it
@@ -69,9 +71,11 @@ Wine, and the Linux-specific fixes, hardening and performance work below.
   fork adds a full-colour format to it (between 1.4.0.5698 and 1.4.0.6010 the alphas played movies in
   216 dithered colours for want of it). The OpenGL renderer plays them in full colour as well, through a
   texture and shader of its own (it used to fall back to 256 colours: about 40 distinct colours in a frame of
-  the intro, against 32,000–115,000 now). Plus
+  the intro, against tens of thousands now). Plus
   a no-AI "vintage cleanup" of all five movies that keeps the original 80s-CG character while removing
   blocking/banding on a big screen.
+
+  ![The same frame of the intro on the OpenGL renderer at 3440×1440: before 1.4.0.6078 in 256 dithered colours (32 in this crop), and 1.4.0.6103 in full colour (35,694)](assets/movie-colours-opengl-before-after.png)
 - **Your own music — any filenames, any format.** Upstream (since August 2026) plays the files in `music/`
   by their position in the folder, and only those of one format: FLAC if there is any, otherwise WAV, OGG,
   then MP3. Here the game uses whatever audio is in `music/`: name the files what you like
@@ -141,7 +145,8 @@ Wine, and the Linux-specific fixes, hardening and performance work below.
   High scores likewise: the 64-bit Linux layout is read alongside upstream's, and written as long as
   a stable build that reads only that layout shares the game folder.
 
-**Native Linux launcher** *(the KeeperFX team's `keeperfx-launcher-qt`, made to run natively)*
+**Native Linux launcher** *(the KeeperFX team's `keeperfx-launcher-qt`, made to run natively; every screen of
+it, with pictures: [the launcher's screenshots](https://github.com/ForkedInTime/keeperfx-launcher-qt-linux/blob/alpha/docs/screenshots.md))*
 - The team's Qt settings launcher compiles cross-platform but was written Windows-first (it launched the game
   through **Wine** and read the version from a Windows `.exe`). Here it's built for Linux and patched to detect
   and launch the **native** engine directly — **no Wine** — read the real version, and expose all of its
@@ -187,6 +192,11 @@ Wine, and the Linux-specific fixes, hardening and performance work below.
   ([FAQ](faq.md#can-i-play-online-with-friends-on-windows)).
 - **Nothing to the team's servers, checked on every build.** `packaging/ci/check-team-servers.sh` fails
   the release build, and the weekly sync's report, if their address comes back into the config or the code.
+- **Two ways a game fell out of step, closed early.** When the Light spell ran out on a creature someone was
+  possessing, each machine dimmed the light by whether the creature was hidden *on its own screen*; and while
+  a player possessed a chicken, that player's first-person camera wrote the chicken's pecking angle into the
+  game, which every machine checks. Both now come from the game itself. The team's fixes (their #5587 and
+  #5588), taken ahead of a sync, with their author.
 
 **Linux performance** *(engine-level optimizations specific to this native build — upstream is Windows-first and does not tune the GCC/Linux path, so these are ours)*
 - **Frame pacing matched to your monitor, whatever its refresh rate.** The shipped default draws as fast as
@@ -338,6 +348,12 @@ first.)
   (Windows files and `#ifdef` branches removed, proven not to change the build), compile-checks and tests it,
   keeps `linux.mk`'s source list current, and opens a pull request for review (details
   [below](development.md#how-the-tux-edition-stays-current-with-upstream)).
+- **A release check for the team's later fixes.** A release that takes one of the team's commits ahead of a
+  sync can miss their later fix to it: stable 1.4.0.6062 to 1.4.0.6098 carried a change of theirs that made
+  lair enemies stop fighting after half a second, while their fix to it sat in a sync only alpha had.
+  [`early-port-followups.py`](../packaging/linux-only/early-port-followups.py) lists every such pair; each
+  needs a written verdict, *port* or *skip* with the reason, and a release that lacks a *port* fails. It
+  runs before every tag and every day on alpha, the current stable and the hotfix branches built on it.
 - **`refresh-alpha.sh`** — shows what the team changed since the last sync, builds with the correct version
   number, generates the UTF-8 fonts, and deploys locally.
 - **`make` builds Linux.** A bare `make` ran upstream's Windows/mingw target, which also overwrote a shared
