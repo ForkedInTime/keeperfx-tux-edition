@@ -86,13 +86,17 @@ cut, alpha or stable, in both repositories:
 | this one | `README.md`, `docs/install.md`, `docs/whats-different.md`, `docs/faq.md`, `docs/development.md` |
 | launcher | `README.md`, `docs/changes.md`, `docs/screenshots.md`, `docs/development.md` |
 
-1. **Read what changed, not the pages.** For each page,
+1. **Read what changed, then every page in full.** For each page,
    `git log --no-merges <the page's last commit>..HEAD` is what it has not seen yet.
    Every change a player can notice gets its line item in `docs/whats-different.md`
    *and* its row in the table at the top of that page. Check each row against its
    section rather than leaving it as it was: the Multiplayer row still read "map packs,
    1 fix" a week after the lobby server shipped. Team fixes taken ahead of a sync count
-   too.
+   too. Then read each page from top to bottom and check every claim against the code,
+   the packaging or the release itself, including the instructions for other programs
+   (Lutris, Heroic, innoextract) against their own pages. A page with no new commits
+   can still be wrong: in November 2026 the install page told Arch users to run a
+   release engine that cannot start there, and called a Flatpak bundle self-updating.
 2. **Facts that change without a commit here.** At a stable cut, the README's
    "Stable is …" sentence. The Flatpak is built on the 1st of each month and goes onto
    whichever release is the latest at that moment, so the README sends Flatpak users to
