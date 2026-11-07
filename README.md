@@ -63,7 +63,7 @@ The download above is **stable**: it only moves once a build has been played and
 launcher's Settings dialog has a release-channel setting, and it only ever offers you releases from the
 channel you picked. The AUR package and the Flatpak follow stable. Not sure? Stay on stable.
 
-**Stable is 1.4.0.6098 (6 November 2026).** The badges above track both channels live.
+**Stable is 1.4.0.6103 (6 November 2026).** The badges above track both channels live.
 
 ## ❓ Help
 
@@ -99,7 +99,7 @@ build; this edition is the Linux half they don't ship, plus the bugs found on th
   KeeperFX team's servers. Tux Edition plays Tux Edition: Windows KeeperFX can't join
   ([why](docs/faq.md#can-i-play-online-with-friends-on-windows)).
 
-478 commits on top of the team's `master`. **[Everything, item by item »](docs/whats-different.md)**
+483 commits on top of the team's `master`. **[Everything, item by item »](docs/whats-different.md)**
 
 ## Credit
 
