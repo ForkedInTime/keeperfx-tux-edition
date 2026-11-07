@@ -32,8 +32,9 @@ and updates arrive with your normal `yay -Syu`:
 yay -S keeperfx-tux
 ```
 
-Then open **KeeperFX** from your menu. **Prefer Flatpak?** Grab `KeeperFX-Tux-Edition-x86_64.flatpak` from
-[the releases](https://github.com/ForkedInTime/keeperfx-tux-edition/releases).
+Then open **KeeperFX** from your menu. **Prefer Flatpak?** `KeeperFX-Tux-Edition-x86_64.flatpak` is rebuilt once a
+month, so it is on the newest of [the releases](https://github.com/ForkedInTime/keeperfx-tux-edition/releases) that
+has one.
 Details for each, and a manual install: **[Installing »](docs/install.md)**
 
 <details>
@@ -93,13 +94,13 @@ build; this edition is the Linux half they don't ship, plus the bugs found on th
   refresh rate (variable refresh included), the game keeps full sharpness on a scaled desktop, and the map view
   no longer costs a processor core.
 - 🧰 **Launcher** — Workshop browser, Mod Manager, and a built-in updater with separate stable and alpha
-  channels.
+  channels ([every screen of it](https://github.com/ForkedInTime/keeperfx-launcher-qt-linux/blob/alpha/docs/screenshots.md)).
 - 🌐 **Our own online lobby** — internet games are listed and connected through this edition's own small
   server, which keeps nothing and gives your address only to the player joining you. Nothing goes to the
   KeeperFX team's servers. Tux Edition plays Tux Edition: Windows KeeperFX can't join
   ([why](docs/faq.md#can-i-play-online-with-friends-on-windows)).
 
-482 commits on top of the team's `master`. **[Everything, item by item »](docs/whats-different.md)**
+489 commits on top of the team's `master`. **[Everything, item by item »](docs/whats-different.md)**
 
 ## Credit
 

@@ -128,21 +128,28 @@ Both contain the same game; they're just two ways to install it.
 
 - **AppImage — recommended.** The simplest: download one file, make it runnable, go. Nothing is installed
   into your system, and you can delete it any time. Best if you just want to play.
-- **Flatpak.** Pick this if you already use Flatpak and want KeeperFX in your app menu with automatic
-  updates. It needs Flatpak set up first and downloads a shared system runtime the first time (a few hundred
-  MB, reused by your other Flatpaks). It's newer and less-tested for this game, so if anything misbehaves,
-  use the AppImage. Grab `KeeperFX-Tux-Edition-x86_64.flatpak` from
-  [Releases](https://github.com/ForkedInTime/keeperfx-tux-edition/releases) and:
+- **Flatpak.** Pick this if you already use Flatpak and want KeeperFX sandboxed, in your app menu. It
+  needs Flatpak set up first and downloads a shared system runtime the first time (a few hundred MB,
+  reused by your other Flatpaks). It's newer and less-tested for this game, so if anything misbehaves,
+  use the AppImage. `KeeperFX-Tux-Edition-x86_64.flatpak` is rebuilt once a month and attached to the
+  newest release of that day, so take it from the newest of
+  [the releases](https://github.com/ForkedInTime/keeperfx-tux-edition/releases) that has one, and:
   `flatpak install --user ./KeeperFX-Tux-Edition-x86_64.flatpak`
-  *(The Flatpak tracks the **stable** channel and is rebuilt monthly, so it may briefly trail a
-  brand-new stable — no matter: it self-updates the game package on launch.)*
+  *(It follows the **stable** channel. Installed from a file, it has no source `flatpak update` can
+  check: new game releases come through the launcher inside it, as in the AppImage, and a newer
+  launcher comes with a newer `.flatpak`, installed the same way.)*
 
 **Short version: use the AppImage unless you specifically want Flatpak.**
 
 ## The complete package (manual install)
 
 The engine and game data without the AppImage around them; you bring the libraries and your *Dungeon
-Keeper* files.
+Keeper* files. Mind which libraries: the engine is built on Ubuntu 24.04 and needs the exact versions it
+was built against — SDL3, SDL3_mixer and SDL3_image 3.x (which Ubuntu 24.04 does not package; the
+release build compiles them), ffmpeg 6 (`libavcodec.so.60`), miniupnpc (`libminiupnpc.so.17`), and
+OpenAL, LuaJIT, libspng, minizip, zlib, libnatpmp, OpenSSL 3 and zstd. **On Arch it does not start**,
+because Arch's ffmpeg and miniupnpc are newer: install the [AUR package](#-arch-linux--install-from-the-aur),
+which is built against them. Anywhere else, the AppImage carries every one of these.
 
 1. Download **`keeperfx-linux-alpha-x86_64-full.7z`** from the [latest release](https://github.com/ForkedInTime/keeperfx-tux-edition/releases/latest).
    (It keeps the project's first name because every installed launcher downloads it by that name.)
@@ -153,10 +160,9 @@ Keeper* files.
    ```
 3. Add your **own** Dungeon Keeper files into `data/` (`bluepal.dat`, `slab0-0.dat`, the palettes…) and
    `sound/` (`atmos1.sbk`, `atmos2.sbk`, `bullfrog.sbk`).
-4. Install the runtime libraries (Arch shown; names vary by distro):
+4. Install the libraries above, then check that none is missing — this must print nothing:
    ```bash
-   sudo pacman -S --needed sdl3 sdl3_mixer sdl3_image \
-     ffmpeg openal luajit libspng minizip zlib miniupnpc libnatpmp openssl zstd
+   cd ~/.local/share/keeperfx-alpha && ldd ./keeperfx | grep 'not found'
    ```
 5. Run: `cd ~/.local/share/keeperfx-alpha && ./keeperfx`
 

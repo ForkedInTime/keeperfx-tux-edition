@@ -31,10 +31,13 @@ deep, so it is already on your machine:
 
 - **Arch (AUR)** — `keeperfx-tux-previous` lists what is kept and sets up an isolated copy of the
   game to play one. Its saves are separate from your current game and it cannot write to it.
-- **AppImage / Flatpak** — the engines are kept beside your game directory, under `previous/`.
+- **AppImage / Flatpak** — the last three engines are kept inside the game folder, in `previous/`
+  ([where the game folder is](#where-is-the-games-log-and-how-do-i-report-a-bug)). There is no
+  command for them yet: play one from a copy of the game folder, so it cannot write to the saves of
+  the game you play now.
 
-Nothing is copied out of your current install without being asked, and nothing you do there can
-touch the campaigns you are playing now.
+`keeperfx-tux-previous` copies nothing out of your current install without being asked, and nothing
+you do in its copy can touch the campaigns you are playing now.
 
 ## How do I install DK1 on Linux?
 
@@ -46,8 +49,10 @@ you install your GOG/Steam/EA copy with a Wine front-end first, then point the l
 1. Install Lutris: `sudo apt install lutris` (Ubuntu/Debian), `sudo pacman -S lutris` (Arch), or the Flatpak.
 2. Link your GOG account: **Preferences → Sources → GOG → Sign in**. This lets Lutris pull the installer
    automatically.
-3. Search **Dungeon Keeper** on [lutris.net](https://lutris.net/games/dungeon-keeper/), click **Install**,
-   and follow the script.
+3. Open [Dungeon Keeper on lutris.net](https://lutris.net/games/dungeon-keeper/), pick a **GOG** installer
+   (*GOG (Auto)* if your account is linked, otherwise the *DOSBox GOG* one), click **Install** and follow
+   the script. Any of them puts the original files on disk; the one called *Wine GOG + KeeperFX* also
+   installs the Windows KeeperFX, which you don't need for this edition.
 4. **If Lutris can't auto-download** (account not linked, offline installer, GOG API hiccup), it shows a
    file picker. Point it at the GOG **setup `.exe`** you downloaded from gog.com (plus any `.bin` parts) —
    *not* an existing install folder. Lutris installs the game fresh into its own Wine prefix.
@@ -64,8 +69,9 @@ If you have the GOG **offline installer** `.exe`, you don't even need to run it 
 sudo apt install innoextract        # Ubuntu/Debian (or your distro's package)
 innoextract setup_dungeon_keeper_gold_*.exe
 ```
-It dumps the game into an `app/` folder; point the launcher at that (its `data/` and `sound/` subfolders). This
-is the lightest option — no GOG client, no Wine.
+It unpacks into the current folder (some installers put the game in an `app/` subfolder); point the
+launcher at the folder that holds `data/` and `sound/`. An installer that came with `.bin` parts needs
+`innoextract --gog`. This is the lightest option — no GOG client, no Wine.
 
 **Option D — Steam + Proton**
 Own it on [Steam](https://store.steampowered.com/app/1996630/Dungeon_Keeper_Gold/)? Enable **Proton** for it
@@ -78,7 +84,8 @@ The KeeperFX launcher tries to **auto-detect** your install and copy the game fi
 it asks you to point it at the folder yourself — so locate the install inside the Wine prefix, typically:
 
 - **Lutris:** `~/Games/dungeon-keeper/drive_c/GOG Games/Dungeon Keeper/` (or wherever you installed it)
-- **Heroic:** `~/Games/Heroic/Dungeon Keeper/drive_c/...`
+- **Heroic:** the game's own folder under `~/Games/Heroic/` (Heroic keeps the Wine prefix apart from it,
+  under `~/Games/Heroic/Prefixes/`)
 
 That folder (and its `data/` and `sound/` subfolders) is what the launcher copies from. You only do this
 once; after that KeeperFX runs natively with **no Wine**.
