@@ -38,7 +38,7 @@ Wine, and the Linux-specific fixes, hardening and performance work below.
 > | 🧰 | **Launcher & tooling** — in-launcher Workshop browser + Installed manager, Mod Manager, Play ▾ menu, built-in updater with **separate stable and alpha channels**, side-by-side log viewer, the last five game logs kept, music download + recovery, single-instance lock, weekly sync bot, a weekly Arch library watch, a daily check for the team's later fixes to anything taken early | 13+ items |
 >
 > <sub>Count it yourself: `git log --oneline --no-merges --invert-grep --grep='^Linux-Snapshot-Of:' upstream/master..HEAD`
-> — 486 commits on top of the team's master, snapshot commits excluded; 23 of them are the team's own fixes, taken ahead of a
+> — 487 commits on top of the team's master, snapshot commits excluded; 23 of them are the team's own fixes, taken ahead of a
 > sync, and keep their authors. The sections below are the line items.</sub>
 
 ## Every change, area by area

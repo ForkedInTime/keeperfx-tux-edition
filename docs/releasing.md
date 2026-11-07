@@ -18,10 +18,13 @@ infers it.
    `packaging/linux-only/early-port-followups.py <commit>`. It must say `ok`. A
    `MISSING` line is a team fix the release has to carry first; an `UNREVIEWED` line
    needs a verdict in `packaging/linux-only/early-port-followups.list` (see below).
-2. Commit the changelog entry and any version change.
-3. Tag it. A stable tag carries no suffix; an alpha tag ends in `-alpha`.
-4. Create the GitHub release for that tag — **and tick prerelease for an alpha.**
-5. CI does the rest: `build-appimage.yml` builds and attaches the AppImage and
+2. **Bring the pages up to date**, in both repositories, against every commit since each
+   page last changed: see [Keeping the pages current](#keeping-the-pages-current). The
+   commit count goes in last.
+3. Commit the changelog entry and any version change.
+4. Tag it. A stable tag carries no suffix; an alpha tag ends in `-alpha`.
+5. Create the GitHub release for that tag — **and tick prerelease for an alpha.**
+6. CI does the rest: `build-appimage.yml` builds and attaches the AppImage and
    `full.7z`; `publish-aur.yml` updates the AUR recipe. The Flatpak is monthly
    and self-updates, so it is not part of cutting a release.
 
@@ -71,6 +74,52 @@ Two ways to confirm it worked, in order of effort:
 - after the build: the AppImage run log should show the new sources compiling,
   e.g. `Building CXX object ... logviewerdialog.cpp.o` for the release that added
   the log viewer.
+
+## Keeping the pages current
+
+Players read the README and the docs pages, not the changelog, so a page that lags is
+wrong information for everyone who reads it. They are brought up to date at **every**
+cut, alpha or stable, in both repositories:
+
+| Repository | Pages |
+|---|---|
+| this one | `README.md`, `docs/install.md`, `docs/whats-different.md`, `docs/faq.md`, `docs/development.md` |
+| launcher | `README.md`, `docs/changes.md`, `docs/screenshots.md`, `docs/development.md` |
+
+1. **Read what changed, not the pages.** For each page,
+   `git log --no-merges <the page's last commit>..HEAD` is what it has not seen yet.
+   Every change a player can notice gets its line item in `docs/whats-different.md`
+   *and* its row in the table at the top of that page. Check each row against its
+   section rather than leaving it as it was: the Multiplayer row still read "map packs,
+   1 fix" a week after the lobby server shipped. Team fixes taken ahead of a sync count
+   too.
+2. **Facts that change without a commit here.** At a stable cut, the README's
+   "Stable is …" sentence. The Flatpak is built on the 1st of each month and goes onto
+   whichever release is the latest at that moment, so the README sends Flatpak users to
+   the newest release *that has one*. Every claim about upstream (what their releases
+   contain, their AppImage pull request) is checked against upstream itself.
+3. **Pictures.** The launcher's pictures (two in its README, seventeen more on its
+   screenshots page) are all retaken whenever anything visible in the launcher changed
+   since the version they show; `git log <the pictures' commit>..origin/alpha` in the
+   launcher repository answers that. They are taken on the released build, from a
+   throwaway copy of a game folder, and each set gets new file names carrying the
+   version (GitHub's image cache keeps serving an overwritten file), with the old files
+   removed. A fix of this edition's that shows on screen gets a before/after picture in
+   `docs/whats-different.md` **when it is made**: the "before" half needs the old build,
+   and an old release build stops starting on a rolling distribution once its libraries
+   move on (by November 2026 the 1.4.0.6072 and 1.4.0.6078 engines, built on
+   Ubuntu 24.04, missed six libraries on Arch). Pictures carry no metadata and show
+   only this edition's own work.
+4. **The count, last.** `git log --oneline --no-merges --invert-grep
+   --grep='^Linux-Snapshot-Of:' upstream/master..HEAD` here (it is in `README.md` and
+   `docs/whats-different.md`), and `git log --oneline --no-merges upstream/master..HEAD`
+   in the launcher repository (its `README.md` and `docs/changes.md`), each counting the
+   commit that writes it. Change the number by its text, not its line number: an edit
+   higher up the page moves the line. Bot commits that CI adds after a cut (the AUR
+   recipe, the library watch) leave it low until the next page commit.
+5. **Check, then look at the live page.** Every relative link and anchor must resolve.
+   After the merge, the page on GitHub must show the change. The launcher repository's
+   default branch is `alpha`, so its front page is `alpha`'s README, not `master`'s.
 
 ## Why the prerelease flag matters
 
