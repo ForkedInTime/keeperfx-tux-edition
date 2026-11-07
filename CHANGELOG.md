@@ -4,6 +4,37 @@ This tracks the changes in *this* fork on top of the KeeperFX team's `master`.
 Version numbers follow the engine build (`<major>.<minor>.<release>.<build>`), with
 `alpha` appended on the alpha channel and nothing appended on the stable one.
 
+## 1.4.0.6103 — 2026-11-06 — stable
+
+**Replaces 1.4.0.6098.** Three of the KeeperFX team's fixes, taken early, with their authors.
+
+- **Creatures that hate each other fight again until you separate them.** When a creature sleeping in its lair
+  found its lair enemy in the same room (a Bile Demon and a Skeleton, a Spider and a Fly, a Warlock and a
+  Vampire), the mentor said your creatures were fighting among themselves, and the fight stopped half a second
+  later with no damage done: the creature attacked dropped out at once. Every stable since 1.4.0.6062 did this.
+  It came from a change of the team's taken early on 22 October (creatures stop fighting when their keepers
+  become allies); the team fixed it on 31 October, and that fix reached only the alpha channel, with the
+  2026-11-05 sync. Measured with a Bile Demon and a Skeleton in one lair: 1.4.0.6098 had seven fights, each
+  over within half a second, with no damage; with this release, and with 1.4.0.5660 from before the change,
+  both fight until the Skeleton dies. To keep such a pair apart, give each its own lair room: a fight starts
+  only while one of them sleeps in its lair with the other in the same room.
+- **Two ways a multiplayer game could fall out of step, closed.** When the Light spell ran out on a creature
+  someone was possessing, the light was dimmed by whether the creature was hidden *on your screen*, which is
+  different on each player's machine. And while a player possessed a chicken, the camera of that player's own
+  game wrote the chicken's pecking angle into the game. Both now come from the game itself, the same for every
+  player. The first-person camera can no longer change the creature or chicken it follows: the compiler now
+  refuses it.
+
+Saves are unchanged: same format as 1.4.0.6098. A replay recorded with 1.4.0.6062 to 1.4.0.6098 in which lair
+enemies meet can play out differently from that point. Checked on this code, on hidden
+displays with no sound: the lair fight above (two runs on the release build: both creatures fight until the
+Skeleton dies, 14 and 10 seconds), every campaign's first level and all twenty of the original campaign on
+OpenGL (35/35, the same engine messages as 1.4.0.6098), the OpenGL checks, the save, load and delete menus (the
+same as 1.4.0.6098), and a two-player game by direct connection (19/19, no resync). The two desyncs need a
+second player to possess a creature, which the test harness cannot script, so they were checked in the code:
+the pecking angle the camera wrote is part of the game's multiplayer checksum, and the light now follows the
+possession flag the game itself sets and clears.
+
 ## 1.4.0.6098 — 2026-11-06 — stable
 
 **Replaces 1.4.0.6088.** A point release: 1.4.0.6088 with this edition's fixes since, and one of the KeeperFX
