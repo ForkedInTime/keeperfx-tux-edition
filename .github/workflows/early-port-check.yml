@@ -1,0 +1,70 @@
+# Team commits we took early, and the team's later fixes to them that we have not taken.
+#
+# Stable 1.4.0.6062 to 1.4.0.6098 shipped one of the team's commits taken ahead of a sync (creatures
+# stop fighting when keepers ally) without the team's fix for what it broke (lair-enemy fights stopped
+# after half a second); the fix sat in a sync that stable did not take. packaging/linux-only/
+# early-port-followups.py finds such pairs and fails until each has a verdict in
+# early-port-followups.list. docs/releasing.md runs it before every tag; this runs it every day on
+# alpha, the latest stable release and any hotfix branch built on it, so a new team commit that
+# touches an early port turns this red within a day.
+#
+# Reads the team's public history from GitHub; sends nothing anywhere.
+name: Early-port follow-ups
+
+on:
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+  push:
+    branches: [alpha]
+    paths:
+      - 'packaging/linux-only/early-port-followups.*'
+      - '.github/workflows/early-port-check.yml'
+  pull_request:
+    paths:
+      - 'packaging/linux-only/early-port-followups.*'
+      - '.github/workflows/early-port-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # every branch and tag, full history
+
+      - name: Fetch the team's master (read only)
+        run: git fetch --no-tags https://github.com/dkfans/keeperfx.git +master:refs/remotes/upstream/master
+
+      # The incident this exists for must stay caught: on 1.4.0.6098 the lair-enemy fix is a 'port'
+      # verdict the release lacks, so the check has to fail there, naming it.
+      - name: Regression -- 1.4.0.6098 must fail on the lair-enemy fix
+        run: |
+          set +e
+          out=$(packaging/linux-only/early-port-followups.py v1.4.0.6098); rc=$?
+          echo "$out"
+          [ "$rc" -eq 1 ] && grep -q '^MISSING .*Fixed lair enemies' <<<"$out" \
+            || { echo "::error::the check no longer catches the 1.4.0.6098 case"; exit 1; }
+
+      - name: Check alpha, the latest stable and hotfix branches on it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          stable=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)
+          refs="origin/alpha $stable"
+          for b in $(git for-each-ref --format='%(refname:short)' refs/remotes/origin/hotfix/); do
+            if git merge-base --is-ancestor "$stable" "$b" \
+               && [ "$(git rev-parse "$b")" != "$(git rev-parse "$stable^{commit}")" ]; then
+              refs="$refs $b"
+            fi
+          done
+          fail=0
+          for r in $refs; do
+            echo "::group::$r"
+            packaging/linux-only/early-port-followups.py --template "$r" || fail=1
+            echo "::endgroup::"
+          done
+          exit $fail
