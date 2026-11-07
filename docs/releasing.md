@@ -13,10 +13,15 @@ infers it.
 
 0. **If the launcher changed, push its `alpha` branch first.** See below — this is
    the step that is easy to forget and produces a release that looks fine.
-1. Commit the changelog entry and any version change.
-2. Tag it. A stable tag carries no suffix; an alpha tag ends in `-alpha`.
-3. Create the GitHub release for that tag — **and tick prerelease for an alpha.**
-4. CI does the rest: `build-appimage.yml` builds and attaches the AppImage and
+1. **Check the team's fixes to anything taken early.** On the commit you are about to
+   tag, with the team's history fetched (`git fetch upstream`):
+   `packaging/linux-only/early-port-followups.py <commit>`. It must say `ok`. A
+   `MISSING` line is a team fix the release has to carry first; an `UNREVIEWED` line
+   needs a verdict in `packaging/linux-only/early-port-followups.list` (see below).
+2. Commit the changelog entry and any version change.
+3. Tag it. A stable tag carries no suffix; an alpha tag ends in `-alpha`.
+4. Create the GitHub release for that tag — **and tick prerelease for an alpha.**
+5. CI does the rest: `build-appimage.yml` builds and attaches the AppImage and
    `full.7z`; `publish-aur.yml` updates the AUR recipe. The Flatpak is monthly
    and self-updates, so it is not part of cutting a release.
 
@@ -269,3 +274,29 @@ The sync merges Linux-only snapshots of the team's tree, never their commits
 
 The build number (`packaging/linux-only/build-number.sh`) keeps the team's
 numbering across snapshots; use it rather than `git rev-list --count HEAD`.
+
+### Team commits taken early, and the team's fixes to them
+
+We take some of the team's fixes before the sync that would bring them
+(`git cherry-pick -x`, so the commit names its origin). The team sometimes fixes
+such a commit days later, and that fix arrives only with the next sync. A release
+cut in between ships the early commit's bug without its cure: stable 1.4.0.6062 to
+1.4.0.6098 carried the team's "creatures stop fighting when keepers ally" without
+their fix for what it broke, and lair-enemy fights stopped after half a second for
+every stable player from 3 to 6 November. The fix was in the 2026-11-05 sync, which
+stable did not take; it shipped in 1.4.0.6103.
+
+`packaging/linux-only/early-port-followups.py <rev>` lists, for a release, every
+later team commit it lacks that touches the same functions (or the same data file)
+as one it took early, names that commit's pull request, or reverts it. Each pair
+needs a line in `early-port-followups.list`: `port` if the release must carry the
+later commit, `skip` with the reason if not (a refactor or feature over the same
+code). Read the later commit, its pull request and the release's own code before
+writing a verdict. A `port` the release lacks fails the check, which is what stops
+a repeat. `.github/workflows/early-port-check.yml` runs it every day on `alpha`,
+the latest stable and any hotfix branch on it, and fails on 1.4.0.6098 on purpose
+to prove it still catches the case it was written for.
+
+So: when you take a team commit early, expect to answer for its follow-ups at every
+cut until the sync that carries them, and treat a fix to an early commit as a fix
+for the release, not as a note for the next sync.

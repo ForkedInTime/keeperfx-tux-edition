@@ -1,0 +1,30 @@
+# Verdicts for packaging/linux-only/early-port-followups.py: a team commit taken early (first sha) and a
+# later team commit that touches the same code and has not reached the release yet (second sha).
+#
+#   <port sha> <later sha> port|skip <reason>
+#
+# port = the release must carry the later commit before it ships (it repairs the early port, or the port
+#        needs it). skip = it does not; say why. Read the later commit and its pull request, and check the
+#        release's own code, before writing a verdict. Add lines; do not delete them: they are the record.
+
+# --- Early ports on top of the 2026-10-19 sync (6c159ad53): stable 1.4.0.6062 to 1.4.0.6103 ---
+
+# The case that made this list. 9f192b60e dropped the clause that let the attacked creature keep fighting,
+# so lair-enemy fights (only the instigator is flagged fight_til_death) stopped after half a second.
+# a0fb5a095 checks both sides' flag. Shipped late, in stable 1.4.0.6103.
+9f192b60e395 a0fb5a09552e port fixes the lair-enemy fights 9f192b60e broke (measured: 0 s vs 10 s with it)
+
+f5bcdf10e468 da038f03ab5f skip UserState refactor (controlled thing moves to UserState); a refactor on others stable lacks, no fix to the possession camera
+f5bcdf10e468 dc24c25248ce skip palette/lens state redesign onto LocalState/UserState (needs the UserState refactors); fixes no bug of the possession camera port
+f5bcdf10e468 7fb7c94635d8 skip clean-up of user/player usage; a refactor
+ddd6fccc82a8 92b0e7cd936b skip UserState refactor part 5 (instances); a refactor
+ddd6fccc82a8 9a0b886e7134 skip spectator camera offset and lights: an older spectator issue, not caused by the rewind map/event-box fix
+ddd6fccc82a8 0e8626c7821c skip disables rewind without kernel page tracking; deliberately not taken, this edition keeps the fallback
+ddd6fccc82a8 dc24c25248ce skip palette/lens state redesign (needs the UserState refactors); not a repair of the rewind fix
+ddd6fccc82a8 29b5eb6bcebe skip feature: rejoining a multiplayer game after a lost connection
+ddd6fccc82a8 7fb7c94635d8 skip clean-up of user/player usage; a refactor
+ddd6fccc82a8 4c0bc0a838d3 skip feature: Lua campaign data in saves
+b520ee28cd83 1092314d2491 skip feature: defeated players become spectators
+b520ee28cd83 d4c0f7ebd473 skip feature: the redesigned multiplayer lobby
+52baf4ebb554 4c0bc0a838d3 skip feature: Lua campaign data in saves
+52baf4ebb554 adfd6d4e77c7 skip feature: game-file check against the host; its Lua loads must go through this edition's sandbox before it is taken

@@ -205,5 +205,7 @@ it existed).
 | `synced-upstream.sh` | the team's commit this checkout last synced to |
 | `build-number.sh` | the build number, in the team's numbering |
 | `sync-linux-mk-sources.sh` | keeps `linux.mk`'s source list in step with the tree |
+| `early-port-followups.py` | fails a release that took a team commit early but lacks the team's later fix to it (`docs/releasing.md`) |
+| `early-port-followups.list` | the verdict for each such pair: `port` or `skip`, with the reason |
 | `selftest.sh` | self-test on a synthetic repository |
 | `lib.sh` | shared helpers |
