@@ -28,3 +28,4 @@ b520ee28cd83 1092314d2491 skip feature: defeated players become spectators
 b520ee28cd83 d4c0f7ebd473 skip feature: the redesigned multiplayer lobby
 52baf4ebb554 4c0bc0a838d3 skip feature: Lua campaign data in saves
 52baf4ebb554 adfd6d4e77c7 skip feature: game-file check against the host; its Lua loads must go through this edition's sandbox before it is taken
+52baf4ebb554 f4bad330f827 skip shares only apply_game_kfxs, and none of the map-config fix's lines: drops two panel refreshes reinit_level_after_load repeats after every load, and adds the config overlay to resync data. That fixes a desync stable also has (a resync keeps the client's own config), not the early port
