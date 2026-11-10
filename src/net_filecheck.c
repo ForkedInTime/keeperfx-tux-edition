@@ -130,12 +130,22 @@ static void make_loaded_file_name(const char *fname, char *out, size_t out_size)
 /* This edition: only files inside the game's folders are listed. Map scripts name files too
  * (loadfile, dofile, require through a package.path they can change), and each listed file's
  * name, size and checksum go to the host, so a hosted map could otherwise learn about any file
- * the player owns. Outside is a name the base folders did not strip (still absolute) or one that
- * climbs out with "..". The test is on the stripped name, so peers decide alike. */
-static TbBool loaded_file_name_is_in_game(const char *name)
+ * the player owns. Outside is an absolute name that no base folder was stripped from, or a name
+ * that climbs out with "..". Absolute is judged on the name as given: normalise_path() drops a
+ * leading slash. Peers decide alike, since every engine path is built from the base it is
+ * stripped by. */
+static TbBool loaded_file_is_in_game(const char *fname, const char *name)
 {
-    if ((name[0] == '\0') || (name[0] == '/') || (name[1] == ':')) {
+    if (name[0] == '\0') {
         return false;
+    }
+    TbBool absolute = (fname[0] == '/') || (fname[0] == '\\') || ((fname[0] != '\0') && (fname[1] == ':'));
+    if (absolute) {
+        char unstripped[FULLPATH_SIZE];
+        normalise_path(fname, unstripped, sizeof(unstripped));
+        if (strcmp(unstripped, name) == 0) {
+            return false;
+        }
     }
     for (const char *segment = name; ; ) {
         const char *slash = strchr(segment, '/');
@@ -157,7 +167,7 @@ void add_loaded_file_checksum(const char *fname)
     }
     char relative_fname[FULLPATH_SIZE];
     make_loaded_file_name(fname, relative_fname, sizeof(relative_fname));
-    if (!loaded_file_name_is_in_game(relative_fname)) {
+    if (!loaded_file_is_in_game(fname, relative_fname)) {
         NETDBG(6, "Loaded file %s is outside the game's folders; not listed", relative_fname);
         return;
     }
