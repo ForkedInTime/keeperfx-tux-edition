@@ -127,6 +127,29 @@ static void make_loaded_file_name(const char *fname, char *out, size_t out_size)
     }
 }
 
+/* This edition: only files inside the game's folders are listed. Map scripts name files too
+ * (loadfile, dofile, require through a package.path they can change), and each listed file's
+ * name, size and checksum go to the host, so a hosted map could otherwise learn about any file
+ * the player owns. Outside is a name the base folders did not strip (still absolute) or one that
+ * climbs out with "..". The test is on the stripped name, so peers decide alike. */
+static TbBool loaded_file_name_is_in_game(const char *name)
+{
+    if ((name[0] == '\0') || (name[0] == '/') || (name[1] == ':')) {
+        return false;
+    }
+    for (const char *segment = name; ; ) {
+        const char *slash = strchr(segment, '/');
+        size_t length = (slash != NULL) ? (size_t)(slash - segment) : strlen(segment);
+        if ((length == 2) && (segment[0] == '.') && (segment[1] == '.')) {
+            return false;
+        }
+        if (slash == NULL) {
+            return true;
+        }
+        segment = slash + 1;
+    }
+}
+
 void add_loaded_file_checksum(const char *fname)
 {
     if (!network_is_active()) {
@@ -134,6 +157,10 @@ void add_loaded_file_checksum(const char *fname)
     }
     char relative_fname[FULLPATH_SIZE];
     make_loaded_file_name(fname, relative_fname, sizeof(relative_fname));
+    if (!loaded_file_name_is_in_game(relative_fname)) {
+        NETDBG(6, "Loaded file %s is outside the game's folders; not listed", relative_fname);
+        return;
+    }
     if (!LbFileExists(fname) || find_loaded_file(&loaded_file_checksums, relative_fname) >= 0) {
         return;
     }

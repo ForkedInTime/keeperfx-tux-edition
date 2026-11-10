@@ -45,7 +45,7 @@ code_lines() {
         | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(\*|//|/\*)' || true
 }
 
-direct="$(code_lines '\b(luaL_loadfilex?|luaL_loadbufferx?|luaL_loadstring|luaL_dostring|lua_load)[[:space:]]*\(' \
+direct="$(code_lines '\b(luaL_loadfilex?|luaL_loadbufferx?|luaL_loadstring|luaL_dostring|lua_loadx?)[[:space:]]*\(' \
     | grep -v '^src/lua_sandbox\.c:' || true)"
 if [ -n "$direct" ]; then
     fail "Lua code loaded directly, not through lua_sandbox.c (these loaders accept bytecode):" \

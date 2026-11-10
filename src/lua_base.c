@@ -109,8 +109,9 @@ static void add_lua_searcher_on_disk(lua_State *L)
     if (lua_istable(L, -1))
     {
         // The first empty slot, not the length: require() stops at the first nil, and the
-        // C-module loaders install_checksummed_lua_loaders() removed leave holes, where the
-        // length operator may name any border
+        // C-module loaders removed by lua_readonly_io.c (and again by
+        // install_checksummed_lua_loaders()) leave holes, where the length operator may name
+        // any border
         int slot = 1;
         for (;; slot++)
         {
@@ -298,12 +299,17 @@ static int load_checksummed_lua_module(lua_State *L)
 {
     const char *module_name = luaL_checkstring(L, 1);
     lua_getglobal(L, "package");
-    lua_getfield(L, -1, "searchpath");
+    // This edition: package.searchpath as it was when the loader was installed (an upvalue), not
+    // whatever a script has put there since (install_checksummed_lua_loaders)
+    lua_pushvalue(L, lua_upvalueindex(1));
     lua_pushstring(L, module_name);
     lua_getfield(L, -3, "path");
     lua_call(L, 2, 2);
     if (lua_isnil(L, -2)) {
         return 1;
+    }
+    if (lua_type(L, -2) != LUA_TSTRING) {
+        return luaL_error(L, "module '%s': package.searchpath gave no file name", module_name);
     }
     const char *fname = lua_tostring(L, -2);
     add_loaded_file_checksum(fname);
@@ -339,7 +345,17 @@ static void install_checksummed_lua_loaders(lua_State *L)
     checksum_file_function(L, "dofile");
     lua_getglobal(L, "package");
     lua_getfield(L, -1, "loaders");
-    lua_pushcfunction(L, load_checksummed_lua_module);
+    if (!lua_istable(L, -1)) {
+        // This edition: as lua_sandbox_open() and lua_readonly_io.c do, warn and keep what is there
+        WARNLOG("Lua: unexpected package.loaders layout; modules are not checksummed");
+        lua_pop(L, 2);
+        return;
+    }
+    // This edition: the module loader keeps package.searchpath as it is now, before any script has
+    // run. Looked up at each require(), a script could replace it with a function returning a table,
+    // and the loader then crashed the game on the missing file name.
+    lua_getfield(L, -2, "searchpath");
+    lua_pushcclosure(L, load_checksummed_lua_module, 1);
     lua_rawseti(L, -2, LUA_MODULE_LOADER_LUA);
     lua_pushnil(L);
     lua_rawseti(L, -2, LUA_MODULE_LOADER_C);
