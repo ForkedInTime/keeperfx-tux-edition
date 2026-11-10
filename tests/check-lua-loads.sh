@@ -9,8 +9,9 @@
 # lua_load, ...) take bytecode as readily as text, so one direct call added to
 # the engine reopens that hole -- and the unit tests, which exercise the
 # sandbox's own functions, would still pass. Upstream code is merged every week;
-# upstream #5582 (multiplayer file checks) is such a change: it loads mod
-# scripts with luaL_loadfile and puts its own module loader in package.loaders.
+# upstream #5582 (multiplayer file checks) was such a change: it loaded mod
+# scripts with luaL_loadfile and put its own module loader in package.loaders.
+# Merged on 2026-11-10 with both going through lua_sandbox.c.
 #
 # The rules, checked on src/ (comments ignored):
 #   1. No direct chunk loader outside src/lua_sandbox.c.
@@ -27,7 +28,9 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
 # file:count of "loaders"/"searchers" string literals allowed outside the sandbox.
-ALLOWED_LOADER_TABLES="src/lua_base.c:2 src/lua_readonly_io.c:1"
+# lua_base.c: add_lua_searcher_on_disk (2) and install_checksummed_lua_loaders (1),
+# whose module loader loads through lua_sandbox_load_module.
+ALLOWED_LOADER_TABLES="src/lua_base.c:3 src/lua_readonly_io.c:1"
 
 failed=0
 fail() {
