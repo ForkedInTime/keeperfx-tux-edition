@@ -2,18 +2,20 @@
 
 <sub>[← Back to the README](../README.md)</sub>
 
-**Upstream supports Linux — as source code.** Their CMake build compiles natively on Linux, and their CI
-builds a Linux binary to test pull requests; you can compile KeeperFX on Linux today. What you can't do
-is *download* it. Their release pipeline cross-compiles to Windows with MinGW, and every release from 2024
-to the current **v1.4.0** ships exactly one file:
-`keeperfx_1_4_0_complete.7z`, a Windows package. Their download page lists Linux as *"Not available yet —
-coming soon"*, and there's an open pull request to build an AppImage on their CI
-([#4990](https://github.com/dkfans/keeperfx/pull/4990)) — good news, and we'll happily stand down the day
-it lands. Until then the Linux path ends at a compiler: no released build, no installer, no launcher.
+**Upstream supports Linux — as source code, and a Linux download is on its way.** Their CMake build
+compiles natively on Linux, and their CI builds a Linux binary to test pull requests; you can compile
+KeeperFX on Linux today. What you can't do yet is *download* it: every release from 2024 to the current
+**v1.4.0** ships exactly one file, `keeperfx_1_4_0_complete.7z`, a Windows package, and their download page
+lists Linux as *"Not available yet — coming soon"*. Since 10 November 2026
+([#5594](https://github.com/dkfans/keeperfx/pull/5594)) their alpha and release pipelines also build a
+native Linux *patch* (the Linux executables and their libraries in a `.tar.gz`, unpacked over a KeeperFX
+install), so their next release will likely include it. That is good news for Linux players. This edition
+carries on alongside it, because what it adds is more than a binary.
 
-**This edition is that missing half, and only that half.** Every week a bot merges the team's latest
+**This edition is the Linux build, and everything around it.** Every week a bot merges the team's latest
 `master` here — with its Windows-only parts stripped out, proven not to change the game — builds and
-tests it and opens a pull request, so the *game* is theirs and stays current — never a stale snapshot
+tests it and opens a pull request, where each change is reviewed for how it plays on Linux and one that
+isn't ready waits. So the *game* is theirs and stays current — never a stale snapshot
 frozen at whatever built cleanly once. On top of it sits the part nobody else
 maintains: a ready-to-run **AppImage, Flatpak and Arch package**, a native Qt launcher that doesn't touch
 Wine, and the Linux-specific fixes, hardening and performance work below.
