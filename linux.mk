@@ -258,7 +258,6 @@ src/map_events.c \
 src/map_locations.c \
 src/map_utils.c \
 src/moonphase.c \
-src/net_checksums.c \
 src/net_game.c \
 src/net_holepunch.c \
 src/net_matchmaking.c \
@@ -363,7 +362,9 @@ src/roomspace_input.c \
 src/save_trash.c \
 src/legacy_progress_lp64.c \
 src/kfx/save/SaveCampaignProgress.cpp \
-src/local_possession.c
+src/local_possession.c \
+src/net_checksum_turn.c \
+src/net_filecheck.c
 
 KFX_C_SOURCES = $(filter %.c,$(KFX_SOURCES))
 KFX_CXX_SOURCES = $(filter %.cpp,$(KFX_SOURCES))

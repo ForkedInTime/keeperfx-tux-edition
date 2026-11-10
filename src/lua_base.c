@@ -17,6 +17,7 @@
 #include "game_legacy.h"
 #include "globals.h"
 #include "gui_msgs.h"
+#include "net_filecheck.h"
 #include "replay.h"
 
 #include "config_creature.h"
@@ -33,6 +34,10 @@
 extern "C" {
 #endif
 
+#define LUA_MODULE_LOADER_LUA 2
+#define LUA_MODULE_LOADER_C 3
+#define LUA_MODULE_LOADER_C_ROOT 4
+
 struct lua_State *Lvl_script = NULL;
 
 /* Lua opens script files itself, with a plain fopen() of the name as spelt.
@@ -41,15 +46,13 @@ struct lua_State *Lvl_script = NULL;
  * LEVELS_LOCATION says campgns/MyCamp while the folder on disk is
  * campgns/mycamp passes the check and then its map's .lua silently fails to
  * load. Windows' filesystem matches case itself, so the same campaign works
- * there. Hand Lua the name that is really on disk instead -- for every
- * luaL_dofile() in this file, so script loading added upstream later is
- * covered without touching each call. */
-static int lua_dofile_on_disk(lua_State *L, const char *fname)
+ * there. Hand Lua the name that is really on disk instead: every script file
+ * this file runs goes through load_checksummed_lua_file() below, and so does
+ * any luaL_dofile() upstream adds here later, without touching each call. */
+static int load_checksummed_lua_file(lua_State *L, const char *fname);
+KFX_UNUSED static int lua_dofile_on_disk(lua_State *L, const char *fname)
 {
-    char disk_fname[PATH_MAX];
-    const char *path = LbFileCaseInsensitivePath(fname, disk_fname, sizeof(disk_fname));
-    // Text only, as every load in this file (lua_sandbox.c)
-    return lua_sandbox_loadfile(L, path) || lua_pcall(L, 0, LUA_MULTRET, 0);
+    return load_checksummed_lua_file(L, fname) || lua_pcall(L, 0, LUA_MULTRET, 0);
 }
 #undef luaL_dofile
 #define luaL_dofile(L, fname) lua_dofile_on_disk(L, fname)
@@ -80,6 +83,7 @@ static int lua_searcher_on_disk(lua_State *L)
             {
                 char disk_fname[PATH_MAX];
                 LbFileCaseInsensitivePath(candidate, disk_fname, sizeof(disk_fname));
+                add_loaded_file_checksum(disk_fname);
                 if (lua_sandbox_load_module(L, name, disk_fname) != LUA_OK)
                     return luaL_error(L, "error loading module '%s' from file '%s':\n\t%s", name, disk_fname, lua_tostring(L, -1));
                 return 1;
@@ -104,13 +108,21 @@ static void add_lua_searcher_on_disk(lua_State *L)
     }
     if (lua_istable(L, -1))
     {
-#if LUA_VERSION_NUM >= 502
-        int count = (int)lua_rawlen(L, -1);
-#else
-        int count = (int)lua_objlen(L, -1);
-#endif
+        // The first empty slot, not the length: require() stops at the first nil, and the
+        // C-module loaders removed by lua_readonly_io.c (and again by
+        // install_checksummed_lua_loaders()) leave holes, where the length operator may name
+        // any border
+        int slot = 1;
+        for (;; slot++)
+        {
+            lua_rawgeti(L, -1, slot);
+            TbBool empty = lua_isnil(L, -1);
+            lua_pop(L, 1);
+            if (empty)
+                break;
+        }
         lua_pushcfunction(L, lua_searcher_on_disk);
-        lua_rawseti(L, -2, count + 1);
+        lua_rawseti(L, -2, slot);
     }
     lua_pop(L, 2);
 }
@@ -273,6 +285,90 @@ int setLuaPath( lua_State* L)
     return 0; // all done!
 }
 
+static int load_checksummed_lua_file(lua_State *L, const char *fname)
+{
+    // This edition: the name really on disk (see lua_dofile_on_disk above), and
+    // text only, as every load in this file (lua_sandbox.c)
+    char disk_fname[PATH_MAX];
+    fname = LbFileCaseInsensitivePath(fname, disk_fname, sizeof(disk_fname));
+    add_loaded_file_checksum(fname);
+    return lua_sandbox_loadfile(L, fname);
+}
+
+static int load_checksummed_lua_module(lua_State *L)
+{
+    const char *module_name = luaL_checkstring(L, 1);
+    lua_getglobal(L, "package");
+    // This edition: package.searchpath as it was when the loader was installed (an upvalue), not
+    // whatever a script has put there since (install_checksummed_lua_loaders)
+    lua_pushvalue(L, lua_upvalueindex(1));
+    lua_pushstring(L, module_name);
+    lua_getfield(L, -3, "path");
+    lua_call(L, 2, 2);
+    if (lua_isnil(L, -2)) {
+        return 1;
+    }
+    if (lua_type(L, -2) != LUA_TSTRING) {
+        return luaL_error(L, "module '%s': package.searchpath gave no file name", module_name);
+    }
+    const char *fname = lua_tostring(L, -2);
+    add_loaded_file_checksum(fname);
+    // This edition: the loader this one replaces was lua_sandbox.c's (text only, and a module of
+    // the game's own library asked for under another name is the one already loaded)
+    if (lua_sandbox_load_module(L, module_name, fname) != LUA_OK) {
+        return luaL_error(L, "error loading module '%s' from file '%s':\n\t%s", module_name, fname, lua_tostring(L, -1));
+    }
+    return 1;
+}
+
+static int call_checksummed_file_function(lua_State *L)
+{
+    if (lua_type(L, 1) == LUA_TSTRING) {
+        add_loaded_file_checksum(lua_tostring(L, 1));
+    }
+    lua_pushvalue(L, lua_upvalueindex(1));
+    lua_insert(L, 1);
+    lua_call(L, lua_gettop(L) - 1, LUA_MULTRET);
+    return lua_gettop(L);
+}
+
+static void checksum_file_function(lua_State *L, const char *function_name)
+{
+    lua_getglobal(L, function_name);
+    lua_pushcclosure(L, call_checksummed_file_function, 1);
+    lua_setglobal(L, function_name);
+}
+
+static void install_checksummed_lua_loaders(lua_State *L)
+{
+    checksum_file_function(L, "loadfile");
+    checksum_file_function(L, "dofile");
+    lua_getglobal(L, "package");
+    lua_getfield(L, -1, "loaders");
+    if (!lua_istable(L, -1)) {
+        // This edition: as lua_sandbox_open() and lua_readonly_io.c do, warn and keep what is there
+        WARNLOG("Lua: unexpected package.loaders layout; modules are not checksummed");
+        lua_pop(L, 2);
+        return;
+    }
+    // This edition: the module loader keeps package.searchpath as it is now, before any script has
+    // run. Looked up at each require(), a script could replace it with a function returning a table,
+    // and the loader then crashed the game on the missing file name.
+    lua_getfield(L, -2, "searchpath");
+    lua_pushcclosure(L, load_checksummed_lua_module, 1);
+    lua_rawseti(L, -2, LUA_MODULE_LOADER_LUA);
+    lua_pushnil(L);
+    lua_rawseti(L, -2, LUA_MODULE_LOADER_C);
+    lua_pushnil(L);
+    lua_rawseti(L, -2, LUA_MODULE_LOADER_C_ROOT);
+    lua_pop(L, 2);
+}
+
+static TbBool run_lua_file(lua_State *L, const char *fname, const char *func)
+{
+    return CheckLua(L, load_checksummed_lua_file(L, fname) || lua_pcall(L, 0, LUA_MULTRET, 0), func);
+}
+
 
 // Function to execute a piece of Lua code, and on failure, print the error message to the console
 TbBool execute_lua_code_from_console(const char* code)
@@ -379,7 +475,7 @@ static TbBool open_lua_script_for_mod(lua_State* L, LevelNumber lvnum, const str
         fname = prepare_file_fmtpath_mod(mod_dir, FGrp_FxData, "lua/init.lua");
         if (LbFileExists(fname))
         {
-            if (CheckLua(L, luaL_dofile(L, fname), "mod_fxdata_lua_file"))
+            if (run_lua_file(L, fname, "mod_fxdata_lua_file"))
             {
                 result = true;
             }
@@ -395,7 +491,7 @@ static TbBool open_lua_script_for_mod(lua_State* L, LevelNumber lvnum, const str
         fname = prepare_file_fmtpath_mod(mod_dir, FGrp_CmpgConfig, "lua/init.lua");
         if (LbFileExists(fname))
         {
-            if (CheckLua(L, luaL_dofile(L, fname), "mod_campaign_lua_file"))
+            if (run_lua_file(L, fname, "mod_campaign_lua_file"))
             {
                 result = true;
             }
@@ -412,7 +508,7 @@ static TbBool open_lua_script_for_mod(lua_State* L, LevelNumber lvnum, const str
         fname = prepare_file_fmtpath_mod(mod_dir, fgroup, "map%05lu.lua", (unsigned long)lvnum);
         if (LbFileExists(fname))
         {
-            if(CheckLua(L, luaL_dofile(L, fname), "mod_level_script_loading"))
+            if(run_lua_file(L, fname, "mod_level_script_loading"))
             {
                 result = true;
             }
@@ -540,6 +636,9 @@ TbBool open_lua_script(LevelNumber lvnum)
 
     char default_path[4096];
     setLuaLibraryPath(Lvl_script, default_path, sizeof(default_path));
+    // After lua_sandbox_open(): it wraps the sandbox's loadfile and dofile, and its module
+    // loader stands in for the sandbox's
+    install_checksummed_lua_loaders(Lvl_script);
 
     char* fname = prepare_file_fmtpath(FGrp_FxData, "lua/init.lua");
 
@@ -549,7 +648,7 @@ TbBool open_lua_script(LevelNumber lvnum)
         close_lua_script();
         return false;
     }
-    if (!CheckLua(Lvl_script, luaL_dofile(Lvl_script, fname), "global_lua_file")) {
+    if (!run_lua_file(Lvl_script, fname, "global_lua_file")) {
         ERRORLOG("failed to load global lua script");
         close_lua_script();
         return false;
@@ -564,7 +663,7 @@ TbBool open_lua_script(LevelNumber lvnum)
     fname = prepare_file_fmtpath(FGrp_CmpgConfig, "lua/init.lua");
     if (LbFileExists(fname))
     {
-        if (!CheckLua(Lvl_script, luaL_dofile(Lvl_script, fname), "campaign_lua_file"))
+        if (!run_lua_file(Lvl_script, fname, "campaign_lua_file"))
         {
             ERRORLOG("failed to load campaign lua script");
         }
@@ -574,7 +673,7 @@ TbBool open_lua_script(LevelNumber lvnum)
     fname = prepare_file_fmtpath(fgroup, "map%05lu.lua", (unsigned long)lvnum);
     // Load and parse the Lua File
     if (LbFileExists(fname)) {
-        if (!CheckLua(Lvl_script, luaL_dofile(Lvl_script, fname), "level_script_loading")) {
+        if (!run_lua_file(Lvl_script, fname, "level_script_loading")) {
             ERRORLOG("failed to load level lua script");
         }
     }
