@@ -29,3 +29,11 @@ b520ee28cd83 d4c0f7ebd473 skip feature: the redesigned multiplayer lobby
 52baf4ebb554 4c0bc0a838d3 skip feature: Lua campaign data in saves
 52baf4ebb554 adfd6d4e77c7 skip feature: game-file check against the host; its Lua loads must go through this edition's sandbox before it is taken
 52baf4ebb554 f4bad330f827 skip shares only apply_game_kfxs, and none of the map-config fix's lines: drops two panel refreshes reinit_level_after_load repeats after every load, and adds the config overlay to resync data. That fixes a desync stable also has (a resync keeps the client's own config), not the early port
+
+# --- Early ports of 2026-11-06 (#5587, #5588): stable 1.4.0.6103 and alpha ahead of their sync ---
+
+# f75ddc07b (#5581) lets several users share one keeper ("Hellhound mode", a testing feature). Each shared
+# function only changes for that; none of the early ports' own lines change.
+1b8545219ed0 f75ddc07b5c5 skip only power_hand_is_empty(player) -> (get_local_user()): the hand moves to each user; the pickup-priority fix's lines are untouched
+f5bcdf10e468 f75ddc07b5c5 skip multi-user only: refuses a creature another user already possesses, handles a slap from another user during the zoom-in, set_player_lens -> set_user_lens; no change to the possession camera fix
+8ea409b1ce23 f75ddc07b5c5 skip init_player_cameras moves its body into init_user_dungeon_camera unchanged, and a rejoining user resets only its own camera; the chicken-peck fix (update_first_person_position) is untouched
