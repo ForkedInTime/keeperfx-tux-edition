@@ -79,8 +79,9 @@ channel you picked. The AUR package and the Flatpak follow stable. Not sure? Sta
 
 ## What's different from upstream KeeperFX
 
-The *game* is the KeeperFX team's. Upstream supports Linux as source code but releases only a Windows
-build; this edition is the Linux half they don't ship, plus the bugs found on the way:
+The *game* is the KeeperFX team's, and since **VERSION** their releases include a Linux build too: a patch
+archive you unpack over a KeeperFX install. This edition is the Linux build and everything around it,
+packaged, launched and kept current the way Linux players expect, plus the bugs found on the way:
 
 - 🐧 **Ready-to-run Linux builds** — the AppImage, a Flatpak and an Arch package, with a native Qt launcher
   that doesn't touch Wine.

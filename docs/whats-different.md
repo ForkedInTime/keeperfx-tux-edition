@@ -2,14 +2,10 @@
 
 <sub>[← Back to the README](../README.md)</sub>
 
-**Upstream supports Linux — as source code, and a Linux download is on its way.** Their CMake build
-compiles natively on Linux, and their CI builds a Linux binary to test pull requests; you can compile
-KeeperFX on Linux today. What you can't do yet is *download* it: every release from 2024 to the current
-**v1.4.0** ships exactly one file, `keeperfx_1_4_0_complete.7z`, a Windows package, and their download page
-lists Linux as *"Not available yet — coming soon"*. Since 10 November 2026
-([#5594](https://github.com/dkfans/keeperfx/pull/5594)) their alpha and release pipelines also build a
-native Linux *patch* (the Linux executables and their libraries in a `.tar.gz`, unpacked over a KeeperFX
-install), so their next release will likely include it. That is good news for Linux players. This edition
+**Upstream releases Linux too, since VERSION.** Their CMake build compiles natively on Linux, and since
+**VERSION** ([#5594](https://github.com/dkfans/keeperfx/pull/5594)) each release also ships a native Linux
+*patch*: the Linux executables and their libraries in a `.tar.gz` that you unpack over a KeeperFX install and
+start from that folder. That is good news for Linux players, and the team deserves the credit. This edition
 carries on alongside it, because what it adds is more than a binary.
 
 **This edition is the Linux build, and everything around it.** Every week a bot merges the team's latest
@@ -28,7 +24,7 @@ Wine, and the Linux-specific fixes, hardening and performance work below.
 >
 > | | What we added | Roughly |
 > |---|---|---|
-> | 🐧 | **Ready-to-run Linux builds** — one-file AppImage, Flatpak, and an Arch/AUR package, plus the native Qt launcher (upstream ships source only — no Linux binary in any release) | the whole platform |
+> | 🐧 | **Ready-to-run Linux builds** — one-file AppImage, Flatpak, and an Arch/AUR package, plus the native Qt launcher (upstream releases a Linux patch archive since VERSION; this edition adds the packages, the launcher and its updater) | the whole platform |
 > | 🧹 | **Linux-only source** — every Windows-only file and `#ifdef _WIN32` branch is stripped from the team's code before it is merged (281 files, ~101,000 lines at the switch), [proven](../packaging/linux-only/README.md) not to change what Linux compiles; a guard workflow keeps it from coming back | the whole tree |
 > | 🧮 | **64-bit & Windows-assumption fixes** — the game was written for 32-bit Windows: level-script argument slots, the software rasteriser's carries (creature shadows), signed game-turn arithmetic, movie-recorder and high-score file layouts, campaign progress and save titles written by earlier Linux builds, the light table in saved games, 64-bit config flags (the hand's), a network timeout; plus mod files in any letter case, `\` paths, Korean code page 949, an API-server SIGPIPE | ~20 fixes |
 > | 🛡️ | **Correctness & security hardening** — a multi-agent Linux audit (out-of-bounds writes from crafted maps/mods, union byte-aliasing, format-string bugs) plus a standing sanitizer pass (AddressSanitizer and UndefinedBehaviorSanitizer) that found six memory faults upstream has shipped since as far back as 2008, static analysis and valgrind runs (a heap overflow in map-script fills, mods that froze the game, a leak on every level start), map scripts that read files but cannot change them, run bytecode or call native code, and chat and replays that can no longer act on your machine | ~60 fixes |
