@@ -36,11 +36,11 @@ Wine, and the Linux-specific fixes, hardening and performance work below.
 > | 💥 | **Crash fixes** — ultrawide creature-possession, UTF-8 fonts, campaign scripts, clean exit, case-sensitive audio, the startup error dialog without libXrandr, Lua errors that closed the game, the creature-list corruption **root-fixed** | ~10 fixes |
 > | ⚡ | **Performance** — frame pacing matched to your monitor, cached parchment map view, per-turn CPU busy-spin, sprite/text blit, GUI hot paths, cached instant-load Workshop | 8 wins |
 > | 🎨 | **Graphics & audio** — upstream's OpenGL renderer built into the Linux binary and made the default (software when OpenGL cannot start), full sharpness on a scaled desktop, front-end movies in any codec and in full colour on either renderer, your own music in any filenames and any of OGG/FLAC/WAV/MP3, a real window icon and desktop identity on X11 *and* Wayland, artwork (and the game's text) regenerated from upstream's sources on every build | 6 items |
-> | 🌐 | **Multiplayer** — this edition's own lobby server (nothing goes to the team's servers, checked on every build), the Classic, Modern and Original mappacks loading in every install method, and two ways a game fell out of step closed with the team's fixes ahead of a sync | 4 items |
-> | 🧰 | **Launcher & tooling** — in-launcher Workshop browser + Installed manager, Mod Manager, Play ▾ menu, built-in updater with **separate stable and alpha channels**, side-by-side log viewer, the last five game logs kept, music download + recovery, single-instance lock, weekly sync bot, a weekly Arch library watch, a daily check for the team's later fixes to anything taken early | 13+ items |
+> | 🌐 | **Multiplayer** — this edition's own lobby server (nothing goes to the team's servers, checked on every build), the Classic, Modern and Original mappacks loading in every install method, two ways a game fell out of step closed with the team's fixes ahead of a sync, and the team's same-files check before a match without it telling the host about your other files | 5 items |
+> | 🧰 | **Launcher & tooling** — in-launcher Workshop browser + Installed manager, Mod Manager, Play ▾ menu, built-in updater with **separate stable and alpha channels**, side-by-side log viewer, the last five game logs kept, your own notes in `keeperfx.cfg` kept, music download + recovery, single-instance lock, weekly sync bot, a weekly Arch library watch, a daily check for the team's later fixes to anything taken early | 14+ items |
 >
 > <sub>Count it yourself: `git log --oneline --no-merges --invert-grep --grep='^Linux-Snapshot-Of:' upstream/master..HEAD`
-> — 489 commits on top of the team's master, snapshot commits excluded; 23 of them are the team's own fixes, taken ahead of a
+> — 494 commits on top of the team's master, snapshot commits excluded; 23 of them are the team's own fixes, taken ahead of a
 > sync, and keep their authors. The sections below are the line items.</sub>
 
 ## Every change, area by area
@@ -173,6 +173,10 @@ it, with pictures: [the launcher's screenshots](https://github.com/ForkedInTime/
   the game log side by side, following live, with a Copy button — and errors now offer a **Show log**
   button directly. The news panel lists this fork's releases (version and date, one line each, the
   full changelog one click away, stable ones with a golden keeper) above the KeeperFX team's news.
+- **Your own notes in `keeperfx.cfg` stay.** After an update the launcher wrote the file again from the
+  release's copy of the defaults, so comment lines you had added, and the file's order, were gone the first
+  time it started. Now your file stays as it is: values change on their own lines, and a setting it lacks is
+  added at the end under the release's explanation of it.
 - **One launcher at a time.** The launcher won't open a second copy of itself (that would let two games fight
   over the same saves).
 - **Accessibility — launcher size.** Scale the whole launcher UI (100 %, 110 %, 125 % … up to 200 %) for
@@ -199,6 +203,15 @@ it, with pictures: [the launcher's screenshots](https://github.com/ForkedInTime/
   a player possessed a chicken, that player's first-person camera wrote the chicken's pecking angle into the
   game, which every machine checks. Both now come from the game itself. The team's fixes (their #5587 and
   #5588), taken ahead of a sync, with their author.
+- **The same files on both sides, and nothing about your other files to the host.** Since November 2026 the
+  team's game checks, before a match starts, that every player loaded the same files for the level as the
+  host (the map, its configs and its scripts), and sends a player whose files differ back to the lobby with
+  the file named (their #5582, from the weekly sync). Each listed file's name, size and checksum go to the
+  host, and a map's scripts can name any file, so in their version a hosted map could have a joining
+  player's game report on files anywhere in their home folder. Here only files inside the game's folders
+  are listed. Measured with two copies of the game: a changed `fxdata/rules.cfg` is named and both go back
+  to the lobby; a script that loads a file from outside the game's folder, by a relative or an absolute
+  name, adds nothing to the list and the match starts.
 
 **Linux performance** *(engine-level optimizations specific to this native build — upstream is Windows-first and does not tune the GCC/Linux path, so these are ours)*
 - **Frame pacing matched to your monitor, whatever its refresh rate.** The shipped default draws as fast as
@@ -335,6 +348,8 @@ first.)
   serialiser forgets its names for the rest, so it cannot hand them back). Saved games
   keep a script's functions as their source text instead of bytecode, so they also survive an edit to the
   script; saves from earlier versions are rebuilt from the scripts without their bytecode ever running.
+  A script that replaced `package.searchpath` with anything but a function crashed the game at its next `require` (in the team's new
+  module loader for the same-files check); the loader keeps its own copy of the function now.
 - **Hardened against crafted add-ons** — a multi-agent Linux audit found several out-of-bounds writes a
   malicious or buggy campaign/map/mod could trigger (script index checks, `.lif`/`.slx`/texture/palette
   file-load size bounds, PNG sprite & movie buffers) plus more union-aliasing and an unbounded WAV parse.
