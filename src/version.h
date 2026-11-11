@@ -30,9 +30,11 @@
 /* Version definitions */
 #include "ver_defs.h"
 /* Program name, copyrights and file names */
-/* These are marked as unofficial by default, if built from the dkfans repository, the tag will be removed by the build system */
-#define PROGRAM_NAME      "Dungeon Keeper FX - Unofficial"
-#define PROGRAM_FULL_NAME "KeeperFX - Unofficial"
+/* The team marks builds not made from their repository "- Unofficial" and their CI removes it from their
+   own. This edition names itself instead: the window title, the log's first line and error boxes say
+   KeeperFX Tux Edition, so neither a player nor a bug report can take it for the team's build. */
+#define PROGRAM_NAME      "KeeperFX Tux Edition"
+#define PROGRAM_FULL_NAME "KeeperFX Tux Edition"
 #define COMPANY_NAME      "Fan community"
 #define INTERNAL_NAME     "keeperfx"
 #define LEGAL_COPYRIGHT   "Open Source"
