@@ -4,6 +4,70 @@ This tracks the changes in *this* fork on top of the KeeperFX team's `master`.
 Version numbers follow the engine build (`<major>.<minor>.<release>.<build>`), with
 `alpha` appended on the alpha channel and nothing appended on the stable one.
 
+## 1.4.0.6199 — 2026-11-10 — alpha
+
+On top of stable 1.4.0.6103: three weeks of the KeeperFX team's work (the 5 and 10 November syncs, about
+sixty changes, most of them for multiplayer), this edition's fixes to their new file check, and a launcher
+that keeps your own notes in `keeperfx.cfg`.
+
+**From the team**
+- **Multiplayer.** A redesigned lobby, also for skirmish; cheats and the computer assistant are lobby settings;
+  a player who loses the connection can rejoin, and the resync message is hidden when they do; defeated
+  players stay on as spectators, with hotkeys for observers; the lobby list updates faster; the first-person
+  view of a possessed creature is predicted on the player's own machine; the host no longer crashes when a
+  player leaves after a failed join; a map or `fxdata` mismatch is shown to every player; a resync carries a
+  level's own configuration.
+- **The same files on both sides.** Before a match starts, every player's game checks that it loaded the same
+  files for the level as the host (the map, its configs and scripts); a player whose files differ goes back
+  to the lobby with the file named.
+- **Gameplay.** Pickup priority, possession camera fixes, creatures don't ask for a lair while none can be
+  built, paths are updated when a neighbouring slab changes, repositioning books no longer turns a power off,
+  payday counts your diggers, spells can be charged on creatures from the battle menu, a trap or door you
+  place comes out of your off-map stock before the crates in your workshop, the minimap keeps its zoom after
+  a load, and chat remembers its command history. Type `!gg` to concede.
+- **Replays.** Replays with Transfer creature work, palette and lens effects no longer drift, and a replay is
+  cleaned up properly when it ends.
+- **Scripting.** `BATTLES_WON[player]` and `BATTLES_LOST[player]`, a campaign's Lua data saved with the game,
+  `-cfg KEY=VALUE` on the command line, objects a script places on a room become part of it, labelled
+  variables are cleared on a restart, and `SET_TRAP_CONFIGURATION(..., SymbolSprites, ...)` works.
+- **Smoothen edges is gone** (the engine ignores `-vidsmooth` now); the launcher hides the checkbox for this
+  engine and keeps it for older ones.
+
+**From this edition**
+- **The file check tells the host nothing about your other files.** Each listed file's name, size and
+  checksum go to the host, and a map's scripts can name any file, so in the team's version a hosted map
+  could have a joining player's game report on files anywhere in their home folder. Here only files inside
+  the game's folders are listed. Measured with two copies of the game: a changed `fxdata/rules.cfg` is named
+  and both go back to the lobby; a script loading a file from outside the game's folder, by a relative or an
+  absolute name, adds nothing to the list and the match starts.
+- **A script can't crash the game through `require`.** In the team's new module loader, a script that
+  replaced `package.searchpath` with anything but a function crashed the game at its next `require`
+  (reproduced); the loader keeps its own copy of the function now.
+- **Scripts still load as source text only.** The team's campaign save can keep script functions as
+  bytecode; that part isn't taken (bytecode isn't checked by LuaJIT, see 1.4.0.6072), so functions are saved
+  as their source text, as before.
+- **Launcher: your own notes in `keeperfx.cfg` stay.** After an update the launcher wrote the file again from
+  the release's copy of the defaults (`_keeperfx.cfg`), so comment lines you had added, and the file's order,
+  were gone the first time it started. Now your file stays as it is: values change on their own lines, a
+  setting your file lacks is added at the end under the release's explanation of it, and resetting the
+  settings puts the release's defaults back without dropping anything else. Measured with the 1.4.0.6103
+  launcher: 3 of 3 comment lines lost at the first start; with this one, 3 of 3 kept, also after a Save. A few
+  *Restore defaults* in one session no longer leave the launcher unable to read or write its settings.
+
+**Compatibility.** Saves go both ways. The team's changes take the save format from 1.1 to 1.9, which only
+adds fields: a save from 1.4.0.6103 loads here, and one made here loads in 1.4.0.6103 (measured both ways on
+Pandaemonium level 4, with the level script's state intact), except a campaign's own Lua data, which is new
+here and which 1.4.0.6103 leaves out. Replays recorded with 1.4.0.6103 or earlier don't play in this alpha (the team
+changed what a replay records). Multiplayer needs the same build on both sides, as always.
+
+Checked on a clean build of this code, on hidden displays with no sound: the unit tests (14,570 and 31
+checks), the save-format check, every campaign's first level on OpenGL (35/35, the same engine messages as
+1.4.0.6103), the OpenGL and menu checks, the script sandbox (every bytecode route refused, the `require`
+probes unchanged), a Lua save and load, saves across 1.4.0.6103 both ways, two-player games by direct
+connection (19/19 with the file check verified; a changed `rules.cfg` named and both back to the lobby; files
+outside the game's folder not listed), and two copies of this build in a ten-minute game with fights at both
+hearts every 600 turns (12,600 turns, no desync, only the starting resync).
+
 ## 1.4.0.6103 — 2026-11-06 — stable
 
 **Replaces 1.4.0.6098.** Three of the KeeperFX team's fixes, taken early, with their authors.
