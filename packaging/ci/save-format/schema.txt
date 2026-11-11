@@ -1,4 +1,4 @@
-format 1.9
+format 1.10
 ActionPoint.activated u16 - save,sync
 ActionPoint.exists bool8 - save,sync
 ActionPoint.mappos struct:Coord2d - save,sync
@@ -65,7 +65,7 @@ Computer2.dig_stack_size i32 - save,sync
 Computer2.events struct:ComputerEvent [33] save,sync
 Computer2.gameturn_delay u32 - save,sync
 Computer2.gameturn_wait u32 - save,sync
-Computer2.held_thing_idx i16 - save,sync
+Computer2.held_thing_idx u16 - save,sync
 Computer2.max_room_build_tasks u32 - save,sync
 Computer2.model u32 - save,sync
 Computer2.ongoing_process i16 - save,sync
@@ -709,6 +709,7 @@ GoldLookup.num_gold_slabs u16 - save,sync
 GoldLookup.player_interested u8 [9] save,sync
 GoldLookup.stl_x i32 - save,sync
 GoldLookup.stl_y i32 - save,sync
+GuiMessage.archon_digit i8 - save,sync
 GuiMessage.expiration_turn u32 - save,sync
 GuiMessage.icon_idx i16 - save,sync
 GuiMessage.plyr_idx i16 - save,sync
@@ -952,7 +953,6 @@ PlayerInfo.player_type u8 - save,sync
 PlayerInfo.players_with_locked_ally_status u16 - save,sync
 PlayerInfo.possession_lock bool8 - save,sync
 PlayerInfo.power_of_cooldown_turn u32 - save,sync
-PlayerInfo.roomspace struct:RoomSpace - save,sync
 PlayerInfo.slap_cooldown_until_turn u32 - save,sync
 PlayerInfo.special_digger i16 - save,sync
 PlayerInfo.victory_state u8 - save,sync
@@ -1272,9 +1272,13 @@ UserState.input_crtr_control u8 - save,sync
 UserState.input_crtr_query u8 - save,sync
 UserState.instance_num u8 - save,sync
 UserState.instance_remain_turns u32 - save,sync
+UserState.last_dig_order_turn u32 - save,sync
+UserState.last_dig_order_was_removal bool8 - save,sync
 UserState.lens_type i16 - save,sync
 UserState.mouse_on_map bool8 - save,sync
+UserState.name str [20] save,sync
 UserState.nearest_teleport bool8 - save,sync
+UserState.num_things_in_hand u8 - save,sync
 UserState.one_click_lock_cursor bool8 - save,sync
 UserState.one_click_mode_exclusive bool8 - save,sync
 UserState.pickup_all_gold bool8 - save,sync
@@ -1284,6 +1288,7 @@ UserState.previous_cursor_subtile_y i32 - save,sync
 UserState.primary_cursor_state u8 - save,sync
 UserState.reconnect_player_id i8 - save,sync
 UserState.render_roomspace struct:RoomSpace - save,sync
+UserState.roomspace struct:RoomSpace - save,sync
 UserState.roomspace_detection_looseness i32 - save,sync
 UserState.roomspace_drag_paint_mode bool8 - save,sync
 UserState.roomspace_height i32 - save,sync
@@ -1297,6 +1302,7 @@ UserState.selected_fp_thing_pickup u16 - save,sync
 UserState.swap_to_untag_mode i8 - save,sync
 UserState.teleport_destination u8 - save,sync
 UserState.thing_under_hand i16 - save,sync
+UserState.things_in_hand u16 [64] save,sync
 UserState.view_type u8 - save,sync
 UserState.work_state u8 - save,sync
 UserState.zoom_to_pos_x i32 - save

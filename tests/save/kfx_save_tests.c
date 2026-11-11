@@ -656,7 +656,91 @@ static void test_migrations(void)
     CHECK(save_migrations_run_table(&ctx, "S", failing, 2, &err) == SVR_Unsupported, "a failing migration wasn't reported");
     mig_log[mig_n] = 0;
     CHECK(strcmp(mig_log, "F") == 0, "ran \"%s\" after a failure, wanted it to stop", mig_log);
-    CHECK(save_migration_count() == 0, "the real registry isn't empty: add a test for the new migration");
+    CHECK(save_migration_count() == 1, "the real registry changed: add a test for the new migration");
+}
+/******************************************************************************/
+/* Format 1.10 moved the hand from the keeper (Dungeon) to each player (UserState); Dungeon's list became
+   a queue of things to drop at the heart. An older save keeps what the keeper held: it moves to the
+   keeper's primary user (the lowest user index playing that keeper). */
+static struct Game *hand_game(void)
+{
+    struct Game *g = calloc(1, sizeof(struct Game));
+    for (int user = 0; user < MAX_NET_USERS; user++)
+        g->user_states[user].player_id = -1;
+    return g;
+}
+
+static void hold(struct Dungeon *dungeon, const ThingIndex *things, int count)
+{
+    for (int i = 0; i < count; i++)
+        dungeon->things_in_hand[i] = things[i];
+    dungeon->num_things_in_hand = count;
+}
+
+static int run_game_migrations(struct Game *g, uint16_t file_minor)
+{
+    struct SaveLoadCtx ctx = { g, NULL, file_minor };
+    struct SaveError err;
+    return save_migrations_run(&ctx, "Game", &err) == SVR_Ok;
+}
+
+static void test_migration_hand_to_user(void)
+{
+    section("migration: the hand moves from the keeper to its user");
+    {   /* hand_moves_to_primary_user */
+        struct Game *g = hand_game();
+        static const ThingIndex held[] = { 11, 12, 13 };
+        g->user_states[0].player_id = 0;
+        hold(&g->dungeon[0], held, 3);
+        CHECK(run_game_migrations(g, 9), "migration failed");
+        CHECK(g->user_states[0].num_things_in_hand == 3, "user 0 holds %d things, wanted 3", g->user_states[0].num_things_in_hand);
+        CHECK(g->user_states[0].things_in_hand[0] == 11 && g->user_states[0].things_in_hand[1] == 12 && g->user_states[0].things_in_hand[2] == 13,
+            "user 0 holds %d %d %d, wanted 11 12 13 in that order", g->user_states[0].things_in_hand[0], g->user_states[0].things_in_hand[1], g->user_states[0].things_in_hand[2]);
+        CHECK(g->dungeon[0].num_things_in_hand == 0, "keeper 0 still queues %d things to drop", g->dungeon[0].num_things_in_hand);
+        free(g);
+    }
+    {   /* hand_moves_for_non_zero_player */
+        struct Game *g = hand_game();
+        static const ThingIndex held[] = { 7 };
+        g->user_states[0].player_id = 2;
+        hold(&g->dungeon[2], held, 1);
+        CHECK(run_game_migrations(g, 9), "migration failed");
+        CHECK(g->user_states[0].num_things_in_hand == 1 && g->user_states[0].things_in_hand[0] == 7, "user 0 playing keeper 2 didn't get its hand");
+        CHECK(g->dungeon[2].num_things_in_hand == 0, "keeper 2 still queues %d things to drop", g->dungeon[2].num_things_in_hand);
+        free(g);
+    }
+    {   /* shared_keeper_goes_to_lowest_user */
+        struct Game *g = hand_game();
+        static const ThingIndex held[] = { 5, 6 };
+        g->user_states[0].player_id = 0;
+        g->user_states[1].player_id = 0;
+        hold(&g->dungeon[0], held, 2);
+        CHECK(run_game_migrations(g, 9), "migration failed");
+        CHECK(g->user_states[0].num_things_in_hand == 2 && g->user_states[0].things_in_hand[0] == 5 && g->user_states[0].things_in_hand[1] == 6,
+            "user 0 didn't get the shared keeper's hand");
+        CHECK(g->user_states[1].num_things_in_hand == 0, "user 1 got %d things too", g->user_states[1].num_things_in_hand);
+        free(g);
+    }
+    {   /* computer_dungeon_untouched */
+        struct Game *g = hand_game();
+        static const ThingIndex held[] = { 21 };
+        g->user_states[0].player_id = 0;
+        hold(&g->dungeon[1], held, 1);
+        CHECK(run_game_migrations(g, 9), "migration failed");
+        CHECK(g->dungeon[1].num_things_in_hand == 1 && g->dungeon[1].things_in_hand[0] == 21, "a keeper with no user lost its list");
+        CHECK(g->user_states[0].num_things_in_hand == 0, "user 0 got another keeper's things");
+        free(g);
+    }
+    {   /* minor_10_untouched */
+        struct Game *g = hand_game();
+        static const ThingIndex held[] = { 11, 12, 13 };
+        g->user_states[0].player_id = 0;
+        hold(&g->dungeon[0], held, 3);
+        CHECK(run_game_migrations(g, 10), "migrations failed on a 1.10 file");
+        CHECK(g->dungeon[0].num_things_in_hand == 3, "a 1.10 file's drop queue was moved");
+        CHECK(g->user_states[0].num_things_in_hand == 0, "a 1.10 file's user hand was filled");
+        free(g);
+    }
 }
 /******************************************************************************/
 /* Container: header, chunks, compression, checksum; and damaged files. */
@@ -1738,6 +1822,7 @@ int main(int argc, char **argv)
     test_selected_unions();
     test_modes();
     test_migrations();
+    test_migration_hand_to_user();
     test_container();
     test_inspect();
     test_recfile();
