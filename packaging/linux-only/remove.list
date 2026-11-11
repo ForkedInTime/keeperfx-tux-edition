@@ -75,6 +75,11 @@ scripts/build-deck-bundle.sh
 scripts/deploy-to-deck.sh
 docs/steam-deck.md
 
+# --- The team's own Linux release ---
+# How to install the team's Linux patch over their Windows release, and how
+# their CMake tree builds it. This fork ships its own Linux builds.
+docs/linux.md
+
 # --- Windows build documentation (MinGW/MSYS, SVN-era instructions, IDE setup) ---
 docs/build_instructions.txt
 docs/ide-setup.md
