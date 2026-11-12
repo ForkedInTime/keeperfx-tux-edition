@@ -48,6 +48,9 @@ static const Uint32 relist_delays_ms[] = {2000, 5000, 10000, 20000, 30000};
  * waits over. One that drops sooner (a lobby that accepts, then fails) keeps them growing,
  * so a flapping lobby is not hammered. */
 #define RELIST_STABLE_MS               60000
+/* The host's lobby screen says the game is off the list once it has been off this long:
+ * a re-listing that works at once (the usual case) never shows. */
+#define RELIST_NOTICE_AFTER_MS          3000
 
 #define MATCHMAKING_WS_PREFIX "wss://"
 #define MATCHMAKING_WS_SUFFIX "/ws"
@@ -69,6 +72,12 @@ char matchmaking_ip_url[MATCHMAKING_URL_MAX] = MATCHMAKING_IP_PREFIX MATCHMAKING
 
 static CURL *curl_handle = NULL;
 static char hosted_lobby_id[MATCHMAKING_ID_MAX] = {0};
+/* The key the lobby gives with a listing, and the listing a re-listing replaces. The lost
+ * connection can still look open to the lobby (its end never arrived there); naming the
+ * old listing with its key has the lobby drop it at once, so the game is not listed twice. */
+static char hosted_lobby_key[MATCHMAKING_ID_MAX] = {0};
+static char replaced_lobby_id[MATCHMAKING_ID_MAX] = {0};
+static char replaced_lobby_key[MATCHMAKING_ID_MAX] = {0};
 char join_lobby_id[MATCHMAKING_ID_MAX] = {0};
 static SDL_Mutex *mutex = NULL;
 static SDL_Thread *connection_thread;
@@ -93,6 +102,7 @@ static Uint32 host_listed_at;
 static int host_relist_attempts;
 static Uint32 host_relist_time;
 static Uint32 host_unlisted_since;
+static TbBool host_unlisted_told;
 static char started_metadata[sizeof(start_metadata)];
 static PunchAddresses queued_punch[MATCHMAKING_SESSIONS_MAX];
 static int queued_punch_read;
@@ -220,7 +230,12 @@ static void websocket_cleanup(void)
 {
     curl_easy_cleanup(curl_handle);
     curl_handle = NULL;
+    if (hosted_lobby_id[0] && hosted_lobby_key[0]) {
+        snprintf(replaced_lobby_id, sizeof(replaced_lobby_id), "%s", hosted_lobby_id);
+        snprintf(replaced_lobby_key, sizeof(replaced_lobby_key), "%s", hosted_lobby_key);
+    }
     hosted_lobby_id[0] = '\0';
+    hosted_lobby_key[0] = '\0';
     listed_session_count = 0;
     receive_length = 0;
     queued_punch_read = 0;
@@ -468,8 +483,13 @@ static int matchmaking_connect_thread(void *request)
         VALUE response = {0};
         int received = websocket_exchange(request, "created", &response);
         const char *id = value_string(value_dict_get(&response, "id"));
+        const char *key = value_string(value_dict_get(&response, "key"));
         if (received > 0 && id && *id && strlen(id) < sizeof(hosted_lobby_id)) {
             snprintf(hosted_lobby_id, sizeof(hosted_lobby_id), "%s", id);
+            // A lobby that gives no key (older server code) just gets no replacing later
+            snprintf(hosted_lobby_key, sizeof(hosted_lobby_key), "%s", key && strlen(key) < sizeof(hosted_lobby_key) ? key : "");
+            replaced_lobby_id[0] = '\0';
+            replaced_lobby_key[0] = '\0';
             heartbeat_time = (Uint32)SDL_GetTicks();
             heartbeat_attempts = 0;
             if (host_was_listed) {
@@ -525,6 +545,7 @@ void matchmaking_disconnect(enum NetSessionPhase phase)
     host_was_listed = false;
     host_listed = false;
     host_relist_attempts = 0;
+    host_unlisted_told = false;
     started_metadata[0] = '\0';
     if (curl_handle && hosted_lobby_id[0]) {
         const char *action = "cancel";
@@ -536,6 +557,8 @@ void matchmaking_disconnect(enum NetSessionPhase phase)
         websocket_send(request);
     }
     websocket_cleanup();
+    replaced_lobby_id[0] = '\0';
+    replaced_lobby_key[0] = '\0';
     matchmaking_session_count = 0;
     SDL_UnlockMutex(mutex);
 }
@@ -586,16 +609,23 @@ static int matchmaking_create_thread(void *previous_thread)
     net_lobby_advertisement(&advertisement);
     PunchAddresses published_addresses;
     load_published_public_ips(create_addresses.ipv4, create_addresses.ipv4_port, create_addresses.ipv6_port, &published_addresses);
-    char request[SEND_BUFFER_SIZE];
-    int used = snprintf(request, sizeof(request), "{\"action\":\"create\",\"ipv4Port\":%d,\"ipv6Port\":%d,\"directIpv4Port\":%d,%s,\"ipv4\":\"%s\",\"ipv6\":\"%s\",\"resultActions\":true}", create_addresses.ipv4_port, create_addresses.ipv6_port, create_addresses.direct_ipv4_port, advertisement.metadata, published_addresses.ipv4, published_addresses.ipv6);
-    if (!advertisement.metadata[0] || used < 0 || used >= sizeof(request)) {
+    if (!advertisement.metadata[0]) {
         return -1;
     }
+    char replaces[2 * MATCHMAKING_ID_MAX + 32] = "";
     SDL_LockMutex(mutex);
     queued_punch_read = 0;
     queued_punch_count = 0;
     snprintf(last_metadata, sizeof(last_metadata), "%s", advertisement.metadata);
+    if (replaced_lobby_id[0] && replaced_lobby_key[0]) {
+        snprintf(replaces, sizeof(replaces), ",\"replaces\":\"%s\",\"key\":\"%s\"", replaced_lobby_id, replaced_lobby_key);
+    }
     SDL_UnlockMutex(mutex);
+    char request[SEND_BUFFER_SIZE];
+    int used = snprintf(request, sizeof(request), "{\"action\":\"create\",\"ipv4Port\":%d,\"ipv6Port\":%d,\"directIpv4Port\":%d,%s,\"ipv4\":\"%s\",\"ipv6\":\"%s\",\"resultActions\":true%s}", create_addresses.ipv4_port, create_addresses.ipv6_port, create_addresses.direct_ipv4_port, advertisement.metadata, published_addresses.ipv4, published_addresses.ipv6, replaces);
+    if (used < 0 || used >= sizeof(request)) {
+        return -1;
+    }
     return matchmaking_connect_thread(request);
 }
 
@@ -620,6 +650,9 @@ int matchmaking_create(const char *udp_ipv4, int udp_ipv4_port, int udp_ipv6_por
     host_listed = false;
     host_relist_attempts = 0;
     host_relist_time = 0;
+    host_unlisted_told = false;
+    replaced_lobby_id[0] = '\0';
+    replaced_lobby_key[0] = '\0';
     started_metadata[0] = '\0';
     create_thread = SDL_CreateThread(matchmaking_create_thread, "matchmaking_host", connection_thread);
     if (!create_thread) {
@@ -771,4 +804,23 @@ int matchmaking_poll_punch(PunchAddresses *output)
         create_thread = SDL_CreateThread(matchmaking_create_thread, "matchmaking_host", NULL);
     }
     return result;
+}
+
+int matchmaking_host_listing_news(void)
+{
+    if (!mutex || !SDL_TryLockMutex(mutex)) {
+        return 0;
+    }
+    int news = 0;
+    if (host_listing_wanted && host_was_listed) {
+        if (!host_listed && !host_unlisted_told && (Uint32)((Uint32)SDL_GetTicks() - host_unlisted_since) >= RELIST_NOTICE_AFTER_MS) {
+            host_unlisted_told = true;
+            news = 1;
+        } else if (host_listed && host_unlisted_told) {
+            host_unlisted_told = false;
+            news = -1;
+        }
+    }
+    SDL_UnlockMutex(mutex);
+    return news;
 }

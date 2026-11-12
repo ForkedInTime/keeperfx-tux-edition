@@ -47,6 +47,7 @@
 #include "config.h"
 #include "config_sounds.h"
 #include "config_strings.h"
+#include "config_translation.h"
 #include "config_settings.h"
 #include "game_merge.h"
 #include "game_legacy.h"
@@ -911,6 +912,15 @@ static TbBool frontnet_host_has_company(void)
     return false;
 }
 
+/* One of this edition's own lines (config/fxdata/translation.toml) in the host's lobby chat. */
+static void frontnet_lobby_notice(const char *alias)
+{
+    TextStringId stridx = get_string_id_by_alias(alias);
+    if (stridx > 0) {
+        add_lobby_notice(get_string(stridx));
+    }
+}
+
 TbBool frontnet_matchmaking_update(void)
 {
     // The lobby no longer listing a hosted game is not a reason to close it on the people
@@ -921,6 +931,15 @@ TbBool frontnet_matchmaking_update(void)
         frontnet_return_to_session_menu(NULL);
         create_frontend_error_box(get_string(GUIStr_NetLobbyConnectionLost));
         return false;
+    }
+    // While it lists itself again, the host knows why nobody new can find the game
+    if (network_is_host() && frontnet_service_selected(FrontendNetSvc_Online)) {
+        int news = matchmaking_host_listing_news();
+        if (news > 0) {
+            frontnet_lobby_notice("NET_GAME_UNLISTED");
+        } else if (news < 0) {
+            frontnet_lobby_notice("NET_GAME_LISTED_AGAIN");
+        }
     }
     return true;
 }

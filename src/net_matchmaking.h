@@ -58,6 +58,9 @@ void matchmaking_refresh_sessions(void);
 int matchmaking_create(const char *udp_ipv4, int udp_ipv4_port, int udp_ipv6_port, int direct_ipv4_port);
 int matchmaking_punch(const char *lobby_id, const char *udp_ipv4, int udp_ipv4_port, int udp_ipv6_port, PunchAddresses *output);
 int matchmaking_poll_punch(PunchAddresses *output);
+/* For the host's lobby screen: 1 once the hosted game has been off the lobby list for a
+ * few seconds, -1 once it is listed again after that, otherwise 0. Each comes once. */
+int matchmaking_host_listing_news(void);
 
 #ifdef __cplusplus
 }
