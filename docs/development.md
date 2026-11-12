@@ -17,11 +17,11 @@ Tested on Arch Linux (x86-64). Package **names** differ across distros, but the 
 sudo pacman -S --needed base-devel git python \
   sdl3 sdl3_mixer sdl3_image \
   ffmpeg openal luajit libspng minizip zlib \
-  miniupnpc libnatpmp openssl zstd
+  miniupnpc libnatpmp curl
 ```
 > Other distros: a C/C++ toolchain, `make`, `git`, `python3`, and the dev packages for SDL3 (+mixer/image),
 > ffmpeg (avformat/avcodec/avutil/swscale/swresample), OpenAL, LuaJIT, libspng, minizip, zlib,
-> miniupnpc, libnatpmp, openssl, zstd. centijson/astronomy/enet6/libcurl are fetched by the makefile.
+> miniupnpc, libnatpmp, libcurl. centijson/astronomy/enet6 are fetched by the makefile.
 
 **2. Clone and build the engine:**
 ```bash
@@ -29,11 +29,15 @@ git clone https://github.com/ForkedInTime/keeperfx-tux-edition.git
 cd keeperfx-tux-edition
 make -f linux.mk \
   deps/centijson/include/json.h deps/astronomy/include/astronomy.h \
-  deps/enet6/include/enet6/enet.h deps/libcurl/lib/libcurl.a
+  deps/enet6/include/enet6/enet.h
 rm -f src/ver_defs.h
-make -f linux.mk BUILD_NUMBER="$(packaging/linux-only/build-number.sh)" VER_SUFFIX=alpha -j"$(nproc)"
+make -f linux.mk SYSTEM_CURL=1 BUILD_NUMBER="$(packaging/linux-only/build-number.sh)" VER_SUFFIX=alpha -j"$(nproc)"
 ```
-This produces **`bin/keeperfx`** (a native ELF).
+This produces **`bin/keeperfx`** (a native ELF). `SYSTEM_CURL=1` links your system's libcurl, as the AUR
+package does. Without it the makefile uses the prebuilt static libcurl the release builds bundle (add
+`deps/libcurl/lib/libcurl.a` to the first command, plus the openssl and zstd dev packages); that one is
+built against OpenSSL 3 and does not link where the system has OpenSSL 4, as Arch has since November 2026.
+Switching between the two in one tree: delete `obj/` first, so nothing stays compiled against the other's headers.
 
 **3. Generate the UTF-8 fonts** (the makefile doesn't build them):
 ```bash
