@@ -259,7 +259,8 @@ jobs:
           for f in PKGBUILD .SRCINFO keeperfx-tux.sh keeperfx-tux.desktop \
                    keeperfx-tux-launcher.sh keeperfx-tux.hook keeperfx-tux-libcheck.sh \
                    keeperfx-tux-stash.sh keeperfx-tux-stash.hook \
-                   keeperfx-tux-unstash.hook keeperfx-tux-previous.sh; do
+                   keeperfx-tux-unstash.hook keeperfx-tux-previous.sh \
+                   keeperfx-tux-system-curl.patch; do
             [ -f "packaging/aur/$f" ] \
               || { echo "::error::packaging/aur/$f is missing; the AUR build context would be incomplete"; exit 1; }
             cp "packaging/aur/$f" "$STAGE/"
