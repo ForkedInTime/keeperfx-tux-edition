@@ -900,11 +900,11 @@ static void process_frontend_packets(void)
   }
 }
 
-/* Whether anyone besides this player is in the game: players or spectators. */
+/* Whether anyone besides the host is in the game: players or spectators. */
 static TbBool frontnet_host_has_company(void)
 {
     for (NetUserId user = 0; user < MAX_NET_USERS; user++) {
-        if (user != my_player_number && network_user_active(user)) {
+        if (user != SERVER_ID && network_user_active(user)) {
             return true;
         }
     }

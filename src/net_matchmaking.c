@@ -44,6 +44,10 @@
  * frontnet_matchmaking_update). */
 static const Uint32 relist_delays_ms[] = {2000, 5000, 10000, 20000, 30000};
 #define RELIST_REPORT_AFTER_MS         60000
+/* A listing that stayed up this long counts as working again: the next loss starts the
+ * waits over. One that drops sooner (a lobby that accepts, then fails) keeps them growing,
+ * so a flapping lobby is not hammered. */
+#define RELIST_STABLE_MS               60000
 
 #define MATCHMAKING_WS_PREFIX "wss://"
 #define MATCHMAKING_WS_SUFFIX "/ws"
@@ -84,6 +88,8 @@ static char start_metadata[LINEMSG_SIZE * 6 + 64];
  * started_metadata keeps what game_started sent, to send again after a re-listing. */
 static TbBool host_listing_wanted;
 static TbBool host_was_listed;
+static TbBool host_listed;
+static Uint32 host_listed_at;
 static int host_relist_attempts;
 static Uint32 host_relist_time;
 static Uint32 host_unlisted_since;
@@ -425,22 +431,34 @@ static int matchmaking_connect_thread(void *request)
 {
     SDL_LockMutex(mutex);
     if (!curl_handle) {
-        curl_handle = curl_easy_init();
-        if (!curl_handle) {
-            SDL_UnlockMutex(mutex);
+        // Connect without holding the lock: an unreachable lobby takes up to
+        // CONNECT_TIMEOUT_MS, and the main thread takes the lock to start a game or to leave
+        SDL_UnlockMutex(mutex);
+        CURL *handle = curl_easy_init();
+        if (!handle) {
             return -1;
         }
         LbNetLog("Matchmaking: connecting to \"%s\"\n", matchmaking_ws_url);
-        curl_easy_setopt(curl_handle, CURLOPT_URL, matchmaking_ws_url);
-        curl_easy_setopt(curl_handle, CURLOPT_CONNECT_ONLY, 2L);
-        curl_easy_setopt(curl_handle, CURLOPT_CONNECTTIMEOUT_MS, (long)CONNECT_TIMEOUT_MS);
-        curl_easy_setopt(curl_handle, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
-        CURLcode curl_result = curl_easy_perform(curl_handle);
+        curl_easy_setopt(handle, CURLOPT_URL, matchmaking_ws_url);
+        curl_easy_setopt(handle, CURLOPT_CONNECT_ONLY, 2L);
+        curl_easy_setopt(handle, CURLOPT_CONNECTTIMEOUT_MS, (long)CONNECT_TIMEOUT_MS);
+        curl_easy_setopt(handle, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+        CURLcode curl_result = curl_easy_perform(handle);
+        SDL_LockMutex(mutex);
         if (curl_result != CURLE_OK) {
             LbNetLog("Matchmaking: connect to \"%s\" failed: %s\n", matchmaking_ws_url, curl_easy_strerror(curl_result));
-            websocket_cleanup();
+            curl_easy_cleanup(handle);
+            if (!curl_handle) {
+                websocket_cleanup();
+            }
             SDL_UnlockMutex(mutex);
             return -1;
+        }
+        if (curl_handle) {
+            // Another connection got there first
+            curl_easy_cleanup(handle);
+        } else {
+            curl_handle = handle;
         }
     }
     int result = -1;
@@ -458,7 +476,8 @@ static int matchmaking_connect_thread(void *request)
                 LbNetLog("Matchmaking: the game is listed again\n");
             }
             host_was_listed = true;
-            host_relist_attempts = 0;
+            host_listed = true;
+            host_listed_at = (Uint32)SDL_GetTicks();
             if (started_metadata[0]) {
                 // Listed again after the game started: say so again, with its map
                 snprintf(start_metadata, sizeof(start_metadata), "%s", started_metadata);
@@ -504,6 +523,7 @@ void matchmaking_disconnect(enum NetSessionPhase phase)
     SDL_LockMutex(mutex);
     host_listing_wanted = false;
     host_was_listed = false;
+    host_listed = false;
     host_relist_attempts = 0;
     started_metadata[0] = '\0';
     if (curl_handle && hosted_lobby_id[0]) {
@@ -597,6 +617,7 @@ int matchmaking_create(const char *udp_ipv4, int udp_ipv4_port, int udp_ipv6_por
     // until the thread below starts (the previous create thread has ended above)
     host_listing_wanted = true;
     host_was_listed = false;
+    host_listed = false;
     host_relist_attempts = 0;
     host_relist_time = 0;
     started_metadata[0] = '\0';
@@ -717,8 +738,13 @@ int matchmaking_poll_punch(PunchAddresses *output)
             result = -1;
         } else {
             Uint32 now = (Uint32)SDL_GetTicks();
-            if (host_relist_attempts == 0) {
+            if (host_listed) {
+                // Just lost: start the waits over only if the listing had held
+                host_listed = false;
                 host_unlisted_since = now;
+                if ((Uint32)(now - host_listed_at) >= RELIST_STABLE_MS) {
+                    host_relist_attempts = 0;
+                }
             }
             if (host_relist_attempts == 0 || (int32_t)(now - host_relist_time) >= 0) {
                 const int last_delay = (int)(sizeof(relist_delays_ms) / sizeof(relist_delays_ms[0])) - 1;
