@@ -168,8 +168,8 @@ of the packaged data.
 
 ## Deliberate choices a reviewer may query
 
-- **`prepare()` reaches the network.** `linux.mk` fetches centijson, astronomy,
-  enet6 and libcurl rather than vendoring them. Doing it in `prepare()` at least
+- **`prepare()` reaches the network.** `linux.mk` fetches centijson, astronomy
+  and enet6 rather than vendoring them (libcurl is Arch's: `SYSTEM_CURL=1`). Doing it in `prepare()` at least
   keeps `build()` offline-shaped. Vendoring them as additional `source=()`
   entries would be cleaner and is the obvious follow-up.
 - **`!strip`.** This is an alpha; usable backtraces in bug reports are worth

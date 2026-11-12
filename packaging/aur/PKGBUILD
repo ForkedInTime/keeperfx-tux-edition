@@ -46,7 +46,9 @@ makedepends=('git' 'python' 'curl' 'p7zip'
              # engine
              'sdl3' 'sdl3_mixer' 'sdl3_image'
              'ffmpeg' 'openal' 'luajit' 'libspng' 'minizip' 'zlib'
-             'miniupnpc' 'libnatpmp' 'openssl' 'zstd'
+             # libcurl comes from 'curl' above: the engine links the system's
+             # (SYSTEM_CURL=1 below), which also brings the OpenSSL it uses
+             'miniupnpc' 'libnatpmp'
              # Qt launcher
              'cmake' 'ninja' 'qt6-base' 'qt6-tools')
 # !strip: this is an alpha -- usable backtraces in bug reports beat the saved MBs.
@@ -92,14 +94,14 @@ _data_trees=(data sound ldata campgns levels lang fxdata creatrs mods music mult
 
 prepare() {
   cd "${srcdir}/${pkgbase}"
-  # These four deps are fetched by the makefile rather than vendored. Doing it in
+  # These three deps are fetched by the makefile rather than vendored. Doing it in
   # prepare() keeps the network access out of build(), which is where makepkg
-  # expects an already-populated source tree.
+  # expects an already-populated source tree. libcurl is not one of them: see
+  # SYSTEM_CURL in build().
   make -f linux.mk \
     deps/centijson/include/json.h \
     deps/astronomy/include/astronomy.h \
-    deps/enet6/include/enet6/enet.h \
-    deps/libcurl/lib/libcurl.a
+    deps/enet6/include/enet6/enet.h
 
   cd "${srcdir}"
   7z x -y "keeperfx-tux-${pkgver}-full.7z" -o"extracted" > /dev/null
@@ -144,7 +146,13 @@ build() {
   else
     _build_number="$(git rev-list --count HEAD)"
   fi
+  # SYSTEM_CURL=1: link Arch's libcurl, not the prebuilt static one the bundled
+  # builds use. The prebuilt is compiled against OpenSSL 3 and calls its ENGINE
+  # API, which OpenSSL 4 removed (Arch, 2026-11-10): linking it failed, so the
+  # package stopped building for everyone. Arch's libcurl is rebuilt with each
+  # OpenSSL, and its soname has been libcurl.so.4 for twenty years.
   make -f linux.mk \
+    SYSTEM_CURL=1 \
     BUILD_NUMBER="${_build_number}" \
     VER_SUFFIX="${_ver_suffix}" \
     -j"$(nproc)"
@@ -213,7 +221,7 @@ package_keeperfx-tux() {
     # before it happens: an explicit rebuild prompt instead of a broken install.
     'libavformat.so' 'libavcodec.so' 'libswresample.so' 'libswscale.so'
     'libavutil.so' 'libopenal.so' 'libspng.so' 'libz.so'
-    'libminiupnpc.so' 'libssl.so' 'libcrypto.so' 'libzstd.so'
+    'libminiupnpc.so' 'libcurl.so'
     # These four ship no soname in provides= at all, so they can only be named
     # directly and stay exposed to the same failure. SDL3 holds its ABI at
     # .so.0 by project policy and the other three are low-churn, which is why
