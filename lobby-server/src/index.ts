@@ -9,7 +9,9 @@
  * /ip answers a game asking which address it is seen from.
  *
  * On purpose:
- *  - nothing is written to storage or logs, and nothing is sent anywhere else;
+ *  - nothing is written to storage, and nothing is sent anywhere else;
+ *  - the only log is a short line per connection event (see log()), so that a
+ *    dropped connection can be explained: never an address, a name or a key;
  *  - the public list never carries an address: a host's address goes only to a
  *    player who asked to join that host, and the player's only to that host.
  *
@@ -95,11 +97,43 @@ interface Peer {
 	gameId?: string;
 	game?: Game;
 	route?: Route;
+	/**
+	 * Given only to the host, so that it can replace this listing when it lists
+	 * the game again after losing its connection. Never listed or logged.
+	 */
+	key?: string;
 	/** When the host last sent anything other than a ping (ms). */
 	heardAt?: number;
 }
 
 type Message = Record<string, unknown> & { action: string };
+
+/**
+ * One line in the server's log (Workers Logs, kept a few days by Cloudflare).
+ * Only what explains a dropped connection: what happened, to which game (the
+ * same random id the public list shows) and how many are connected. Never an
+ * address, a player or game name, or a key.
+ */
+function log(event: string, fields: Record<string, string | number | boolean> = {}): void {
+	console.log({ event, ...fields });
+}
+
+/** A game's id as the log shows it: enough to follow one game. */
+function shortId(id: string | undefined): string {
+	return (id ?? "").slice(0, 8);
+}
+
+/** A build number for the log, or "other": the version is whatever the client sent. */
+function logVersion(version: string): string {
+	const build = firstWord(version);
+	return /^\d{1,5}(\.\d{1,6}){1,3}$/.test(build) ? build : "other";
+}
+
+function sameKey(a: string, b: string): boolean {
+	const left = encoder.encode(a);
+	const right = encoder.encode(b);
+	return left.byteLength === right.byteLength && crypto.subtle.timingSafeEqual(left, right);
+}
 
 function isMessage(value: unknown): value is Message {
 	return typeof value === "object" && value !== null && !Array.isArray(value) && typeof (value as Message).action === "string";
@@ -257,6 +291,10 @@ export class Lobby extends DurableObject<Env> {
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
 		ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(PING, PONG));
+		// Runs on a fresh start and on every wake from hibernation, so it is the
+		// commonest line. A restart by Cloudflare ends every connection: it shows
+		// here as a start with none left.
+		log("lobby_started", { connections: ctx.getWebSockets().length });
 	}
 
 	async fetch(request: Request): Promise<Response> {
@@ -312,12 +350,13 @@ export class Lobby extends DurableObject<Env> {
 		}
 	}
 
-	async webSocketClose(ws: WebSocket): Promise<void> {
-		this.hangUp(ws);
+	async webSocketClose(ws: WebSocket, code: number, _reason: string, wasClean: boolean): Promise<void> {
+		this.hangUp(ws, { code, clean: wasClean });
 	}
 
-	async webSocketError(ws: WebSocket): Promise<void> {
-		this.hangUp(ws);
+	async webSocketError(ws: WebSocket, error: unknown): Promise<void> {
+		// The kind of error only: its message is text from outside this code.
+		this.hangUp(ws, { error: error instanceof Error ? error.name : "unknown" });
 	}
 
 	/** Drops the games of hosts that have gone quiet without saying goodbye. */
@@ -329,6 +368,7 @@ export class Lobby extends DurableObject<Env> {
 			const peer = this.peer(ws);
 			const pingedAt = this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? 0;
 			if (now - Math.max(peer.heardAt ?? 0, pingedAt) > limit) {
+				log("host_went_quiet", { game: shortId(peer.gameId), silentSeconds: Math.round((now - Math.max(peer.heardAt ?? 0, pingedAt)) / 1000) });
 				this.forget(ws, peer);
 				dropped = true;
 				try {
@@ -350,6 +390,7 @@ export class Lobby extends DurableObject<Env> {
 		if (!ipv4Port && !ipv6Port) {
 			return this.refuse(ws, "No port to reach the host on");
 		}
+		const replaced = this.takeOver(ws, message);
 		if (!peer.game && this.games().size >= MAX_GAMES) {
 			return this.refuse(ws, "The lobby is full, try again later");
 		}
@@ -362,11 +403,44 @@ export class Lobby extends DurableObject<Env> {
 		const route: Route = { ...reachable, ipv4Port, ipv6Port, directIpv4Port: port(message.directIpv4Port) };
 		const game = newGame();
 		readGame(message, game);
+		if (replaced) {
+			// Keeps its place in the list.
+			game.createdAt = replaced.game.createdAt;
+		}
 		const gameId = crypto.randomUUID().replaceAll("-", "");
-		ws.serializeAttachment({ ip: peer.ip, gameId, game, route, heardAt: Date.now() } satisfies Peer);
-		this.send(ws, JSON.stringify({ type: "created", id: gameId }));
+		const key = crypto.randomUUID().replaceAll("-", "");
+		ws.serializeAttachment({ ip: peer.ip, gameId, game, route, key, heardAt: Date.now() } satisfies Peer);
+		log("game_listed", { game: shortId(gameId), replaced: shortId(replaced?.gameId), version: logVersion(game.version), games: this.games().size });
+		this.send(ws, JSON.stringify({ type: "created", id: gameId, key }));
 		this.broadcast();
 		await this.scheduleSweep();
+	}
+
+	/**
+	 * A host that lost its connection lists its game again on a new one, naming
+	 * the old listing and the key it was given for it. The old connection can
+	 * still look open from here (the goodbye never arrived): its listing goes now,
+	 * not after the silence limit, so the game is never listed twice.
+	 */
+	private takeOver(ws: WebSocket, message: Message): { gameId: string; game: Game } | undefined {
+		if (typeof message.replaces !== "string" || typeof message.key !== "string") {
+			return undefined;
+		}
+		const oldWs = this.games().get(message.replaces);
+		if (!oldWs || oldWs === ws) {
+			return undefined;
+		}
+		const old = this.peer(oldWs);
+		if (!old.key || !sameKey(old.key, message.key)) {
+			return undefined;
+		}
+		this.forget(oldWs, old);
+		try {
+			oldWs.close(1000, "Listed again");
+		} catch {
+			// Already gone.
+		}
+		return { gameId: old.gameId!, game: old.game! };
 	}
 
 	private update(ws: WebSocket, peer: Peer, message: Message): void {
@@ -389,6 +463,7 @@ export class Lobby extends DurableObject<Env> {
 		if (!peer.game || message.id !== peer.gameId) {
 			return this.send(ws, JSON.stringify({ type: "deleted", success: false }));
 		}
+		log("game_closed", { game: shortId(peer.gameId), by: message.action, phase: peer.game.phase });
 		this.forget(ws, peer);
 		this.send(ws, JSON.stringify({ type: "deleted", success: true }));
 		this.broadcast();
@@ -435,6 +510,7 @@ export class Lobby extends DurableObject<Env> {
 				}),
 			);
 		} catch {
+			log("host_unreachable", { game: shortId(host.gameId) });
 			this.forget(hostWs, host);
 			this.broadcast();
 			return this.refuse(ws, "That game has closed");
@@ -490,11 +566,14 @@ export class Lobby extends DurableObject<Env> {
 		ws.serializeAttachment({ ip: peer.ip } satisfies Peer);
 	}
 
-	private hangUp(ws: WebSocket): void {
+	private hangUp(ws: WebSocket, why: Record<string, string | number | boolean>): void {
 		const peer = this.peer(ws);
 		if (peer.game) {
+			log("host_disconnected", { game: shortId(peer.gameId), phase: peer.game.phase, listedSeconds: Math.round((Date.now() - peer.game.createdAt) / 1000), ...why });
 			this.forget(ws, peer);
 			this.broadcast();
+		} else {
+			log("disconnected", why);
 		}
 		try {
 			ws.close(1000, "Goodbye");

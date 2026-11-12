@@ -36,10 +36,25 @@ A join is refused with the reason the game shows when the builds differ, the
 game has started, is locked or full, or spectators are not allowed. A game whose
 host stops pinging is dropped after 100 seconds.
 
+A host that loses its connection lists its game again by itself. The new
+listing names the old one and the key the server gave the host for it (never
+listed, never logged), and the old row goes at once, even when the server
+never saw the old connection end. Without that, the game would show twice until
+the old one went quiet.
+
 ## What it keeps
 
-Nothing beyond the open connections. No storage, no logs (`observability` is
-off in `wrangler.jsonc`), no messages to anyone else.
+Nothing beyond the open connections, apart from a short event log. No storage,
+no messages to anyone else.
+
+The log exists to explain dropped connections. It has one line per event (a
+game listed, closed or listed again, a connection ending, a host going quiet,
+the server starting or waking up), with the game's random id, the build number,
+a few numbers such as how many connections are open, and how a connection
+ended. It never holds an address, a player or game name, a host's key, or any
+other text a game sends, and Cloudflare's own request logs are off
+(`observability` in `wrangler.jsonc`). Cloudflare keeps these lines for a few
+days (3 on the free plan, 7 on the paid one).
 
 The public list carries no addresses. A host's address goes only to a player
 who asked to join that host, and the player's address only to that host. That
