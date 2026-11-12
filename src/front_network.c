@@ -47,6 +47,7 @@
 #include "config.h"
 #include "config_sounds.h"
 #include "config_strings.h"
+#include "config_translation.h"
 #include "config_settings.h"
 #include "game_merge.h"
 #include "game_legacy.h"
@@ -900,12 +901,45 @@ static void process_frontend_packets(void)
   }
 }
 
+/* Whether anyone besides the host is in the game: players or spectators. */
+static TbBool frontnet_host_has_company(void)
+{
+    for (NetUserId user = 0; user < MAX_NET_USERS; user++) {
+        if (user != SERVER_ID && network_user_active(user)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* One of this edition's own lines (config/fxdata/translation.toml) in the host's lobby chat. */
+static void frontnet_lobby_notice(const char *alias)
+{
+    TextStringId stridx = get_string_id_by_alias(alias);
+    if (stridx > 0) {
+        add_lobby_notice(get_string(stridx));
+    }
+}
+
 TbBool frontnet_matchmaking_update(void)
 {
-    if (network_is_host() && frontnet_service_selected(FrontendNetSvc_Online) && enet_matchmaking_host_update() < 0) {
+    // The lobby no longer listing a hosted game is not a reason to close it on the people
+    // already in it: the game lists itself again in the background (net_matchmaking.c).
+    // Only a host who is alone, and still unlisted after a minute, is told.
+    if (network_is_host() && frontnet_service_selected(FrontendNetSvc_Online) && enet_matchmaking_host_update() < 0
+        && !frontnet_host_has_company()) {
         frontnet_return_to_session_menu(NULL);
         create_frontend_error_box(get_string(GUIStr_NetLobbyConnectionLost));
         return false;
+    }
+    // While it lists itself again, the host knows why nobody new can find the game
+    if (network_is_host() && frontnet_service_selected(FrontendNetSvc_Online)) {
+        int news = matchmaking_host_listing_news();
+        if (news > 0) {
+            frontnet_lobby_notice("NET_GAME_UNLISTED");
+        } else if (news < 0) {
+            frontnet_lobby_notice("NET_GAME_LISTED_AGAIN");
+        }
     }
     return true;
 }

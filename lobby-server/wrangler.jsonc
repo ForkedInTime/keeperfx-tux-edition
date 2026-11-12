@@ -9,6 +9,7 @@
 		"bindings": [{ "name": "LOBBY", "class_name": "Lobby" }]
 	},
 	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["Lobby"] }],
-	// No request logs: the server keeps nothing about who used it.
-	"observability": { "enabled": false }
+	// Only the server's own log lines (log() in src/index.ts: events, never an
+	// address or a name). No request logs: those would carry who connected.
+	"observability": { "enabled": true, "logs": { "invocation_logs": false } }
 }

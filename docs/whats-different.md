@@ -187,7 +187,9 @@ it, with pictures: [the launcher's screenshots](https://github.com/ForkedInTime/
   home routers (UDP hole punching) run on this edition's own server, `lobby.keeperfx-tux.workers.dev`. Its
   code is in [`lobby-server/`](../lobby-server/). The KeeperFX team's lobby is not used: a `keeperfx.cfg`
   that still names it (every one written before November 2026) is switched to ours by the game and the
-  launcher, with nothing for the player to change. The server stores nothing and keeps no logs. The public
+  launcher, with nothing for the player to change. The server stores nothing. Its only log is one line per
+  connection event (a game listed or closed, a connection ending), kept a few days by Cloudflare to explain
+  dropped connections; it never holds an address or a name. The public
   list carries no addresses: a host's address goes only to a player who asked to join that host, and back.
   Games run directly between the players. Measured on 2026-11-06 with two copies of build 6155: the second
   found the first in the list, joined through the lobby in 20 ms over IPv6, and a match on level 52 ran a

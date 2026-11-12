@@ -21,8 +21,12 @@ function metadata({ name = "Test game", version = VERSION, phase = "Lobby", join
 	return `"name":"${name}","version":"${version}","phase":"${phase}","joinable":${joinable},"maxPlayers":${maxPlayers},"spectatorSupport":1,"spectatorsEnabled":${spectatorsEnabled},"maxSpectators":50,"spectatorCount":${spectatorCount},"rejoinOpen":${rejoinOpen},"players":[${players.map((p) => `"${p}"`).join(",")}]`;
 }
 
-const create = (meta, { ipv4Port = 5556, ipv6Port = 5556, direct = 5557, ipv4 = "203.0.113.10", ipv6 = "" } = {}) =>
-	`{"action":"create","ipv4Port":${ipv4Port},"ipv6Port":${ipv6Port},"directIpv4Port":${direct},${meta},"ipv4":"${ipv4}","ipv6":"${ipv6}","resultActions":true}`;
+// matchmaking_create_thread(); a host listing its game again after losing the
+// lobby connection adds the id and key of the listing it lost.
+const create = (meta, { ipv4Port = 5556, ipv6Port = 5556, direct = 5557, ipv4 = "203.0.113.10", ipv6 = "", replaces, key } = {}) =>
+	`{"action":"create","ipv4Port":${ipv4Port},"ipv6Port":${ipv6Port},"directIpv4Port":${direct},${meta},"ipv4":"${ipv4}","ipv6":"${ipv6}","resultActions":true` +
+	(replaces ? `,"replaces":"${replaces}","key":"${key}"` : "") +
+	"}";
 const update = (id, meta) => `{"action":"update","id":"${id}",${meta}}`;
 const started = (id, meta) => `{"action":"game_started","id":"${id}","mapNumber":1,"mapName":"Map 1",${meta}}`;
 const punch = (lobbyId, { version = VERSION, role = "player", ipv4 = "198.51.100.20", ipv4Port = 6000 } = {}) =>
@@ -314,6 +318,95 @@ await test("a host that disconnects disappears from the list", async () => {
 	await browser.listWhere((lobbies) => lobbies.some((l) => l.name === "Leaving"));
 	host.close();
 	await browser.listWhere((lobbies) => !lobbies.some((l) => l.name === "Leaving"));
+	browser.close();
+});
+
+await test("a listed game gets a private key that the list never shows", async () => {
+	const browser = await new Client("browser").open();
+	const host = await new Client("host").open();
+	host.send(create(metadata({ name: "Keyed" })));
+	const created = await host.next("created");
+	assert.match(created.key ?? "", /^[0-9a-f]{32}$/, `no key in ${JSON.stringify(created)}`);
+	assert.notEqual(created.key, created.id);
+	browser.send(LIST);
+	const list = await browser.listWhere((lobbies) => lobbies.some((l) => l.name === "Keyed"));
+	assert.ok(!JSON.stringify(list).includes(created.key), "the key is in the public list");
+	host.close();
+	browser.close();
+});
+
+// The host's old connection can stay open on the server's side after the game has
+// lost it (no goodbye reached the server). The game then lists itself again on a new
+// connection, naming the old listing and its key: one game, listed once, at once.
+await test("a host listing its game again replaces its stale listing at once", async () => {
+	const browser = await new Client("browser").open();
+	const stale = await new Client("stale connection").open();
+	stale.send(create(metadata({ name: "Relisted" })));
+	const first = await stale.next("created");
+	// To the server a stale connection looks alive until the silence limit (3 s in
+	// the test server): keep it pinging, so only the replacement can remove it.
+	const keepAlive = setInterval(() => !stale.closed && stale.send('{"action":"ping"}'), 500);
+	try {
+		browser.send(LIST);
+		await browser.listWhere((lobbies) => lobbies.some((l) => l.id === first.id));
+		await sleep(1000);
+
+		const fresh = await new Client("new connection").open();
+		fresh.send(create(metadata({ name: "Relisted" }), { replaces: first.id, key: first.key }));
+		const second = await fresh.next("created");
+		assert.notEqual(second.id, first.id);
+		const list = await browser.listWhere((lobbies) => !lobbies.some((l) => l.id === first.id), 1500);
+		assert.deepEqual(
+			list.lobbies.filter((l) => l.name === "Relisted").map((l) => l.id),
+			[second.id],
+		);
+		for (let i = 0; i < 10 && !stale.closed; i++) {
+			await sleep(100);
+		}
+		assert.ok(stale.closed, "the stale connection was left open");
+
+		// The new listing is a normal one: it can be joined.
+		browser.send(punch(second.id));
+		await browser.next("punch");
+		await fresh.next("punch");
+		fresh.close();
+		browser.close();
+	} finally {
+		clearInterval(keepAlive);
+	}
+});
+
+await test("a wrong key or another game's key replaces nothing", async () => {
+	const browser = await new Client("browser").open();
+	const victim = await new Client("victim").open();
+	victim.send(create(metadata({ name: "Victim" })));
+	const target = await victim.next("created");
+	const other = await new Client("other host").open();
+	other.send(create(metadata({ name: "Other" })));
+	const own = await other.next("created");
+	// Out of reach of the test server's 3-second silence limit.
+	const keepAlive = setInterval(() => [victim, other].forEach((c) => !c.closed && c.send('{"action":"ping"}')), 500);
+	try {
+		const guesser = await new Client("guesser").open();
+		guesser.send(create(metadata({ name: "Guess" }), { replaces: target.id, key: "0".repeat(32) }));
+		await guesser.next("created");
+		const thief = await new Client("thief").open();
+		thief.send(create(metadata({ name: "Thief" }), { replaces: target.id, key: own.key }));
+		await thief.next("created");
+
+		browser.send(LIST);
+		const list = await browser.listWhere((lobbies) => ["Guess", "Thief"].every((name) => lobbies.some((l) => l.name === name)));
+		assert.ok(list.lobbies.some((l) => l.id === target.id), "the victim's game was removed");
+		assert.ok(list.lobbies.some((l) => l.id === own.id), "the other host's game was removed");
+		await sleep(300);
+		assert.ok(!victim.closed, "the victim's connection was closed");
+		guesser.close();
+		thief.close();
+	} finally {
+		clearInterval(keepAlive);
+	}
+	victim.close();
+	other.close();
 	browser.close();
 });
 

@@ -497,6 +497,7 @@ short game_is_busy_doing_gui(void);
 void set_gui_visible(TbBool visible);
 void toggle_gui(void);
 void add_message(long plyr_idx, char *msg);
+void add_lobby_notice(const char *text);
 unsigned long toggle_status_menu(short visib);
 TbBool toggle_first_person_menu(TbBool visible);
 void toggle_gui_overlay_map(void);

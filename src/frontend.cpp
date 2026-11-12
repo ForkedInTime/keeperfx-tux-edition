@@ -545,6 +545,19 @@ void add_message(long plyr_idx, char *msg)
 }
 
 /**
+ * Puts a line from the game itself in this player's lobby chat: no name in front of it,
+ * and nobody else sees it.
+ */
+void add_lobby_notice(const char *text)
+{
+    char line[NET_MESSAGE_LEN];
+    snprintf(line, sizeof(line), "%s", text);
+    add_message(netstate.my_id, line);
+    struct NetMessage *nmsg = &net_message[net_number_of_messages - 1];
+    snprintf(nmsg->text, NET_MESSAGE_LEN, "%s", text);
+}
+
+/**
  * Makes error box with message from GUI strings collection.
  *
  * @param msg_idx
