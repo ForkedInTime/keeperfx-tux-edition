@@ -1,3 +1,4 @@
+curl libcurl.so=4-64
 ffmpeg libavcodec.so=63-64
 ffmpeg libavformat.so=63-64
 ffmpeg libavutil.so=61-64
@@ -9,10 +10,7 @@ luajit libluajit-5.1.so.2
 miniupnpc libminiupnpc.so=21-64
 minizip libminizip.so.1
 openal libopenal.so=1-64
-openssl libcrypto.so=3-64
-openssl libssl.so=3-64
 sdl3 libSDL3.so.0
 sdl3_image libSDL3_image.so.0
 sdl3_mixer libSDL3_mixer.so.0
 zlib libz.so=1-64
-zstd libzstd.so=1-64
