@@ -900,9 +900,24 @@ static void process_frontend_packets(void)
   }
 }
 
+/* Whether anyone besides this player is in the game: players or spectators. */
+static TbBool frontnet_host_has_company(void)
+{
+    for (NetUserId user = 0; user < MAX_NET_USERS; user++) {
+        if (user != my_player_number && network_user_active(user)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 TbBool frontnet_matchmaking_update(void)
 {
-    if (network_is_host() && frontnet_service_selected(FrontendNetSvc_Online) && enet_matchmaking_host_update() < 0) {
+    // The lobby no longer listing a hosted game is not a reason to close it on the people
+    // already in it: the game lists itself again in the background (net_matchmaking.c).
+    // Only a host who is alone, and still unlisted after a minute, is told.
+    if (network_is_host() && frontnet_service_selected(FrontendNetSvc_Online) && enet_matchmaking_host_update() < 0
+        && !frontnet_host_has_company()) {
         frontnet_return_to_session_menu(NULL);
         create_frontend_error_box(get_string(GUIStr_NetLobbyConnectionLost));
         return false;

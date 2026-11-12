@@ -38,6 +38,12 @@
 #define HEARTBEAT_INTERVAL_MS          30000
 #define HEARTBEAT_TIMEOUT_MS           5000
 #define HEARTBEAT_FAILURE_LIMIT        3
+/* A host whose game the lobby has stopped listing tries again at once, then after these
+ * waits (the last one repeating), for as long as it hosts. Only a host still unlisted
+ * after RELIST_REPORT_AFTER_MS is told (a host with players keeps them, see
+ * frontnet_matchmaking_update). */
+static const Uint32 relist_delays_ms[] = {2000, 5000, 10000, 20000, 30000};
+#define RELIST_REPORT_AFTER_MS         60000
 
 #define MATCHMAKING_WS_PREFIX "wss://"
 #define MATCHMAKING_WS_SUFFIX "/ws"
@@ -72,6 +78,16 @@ static Uint32 heartbeat_time;
 static int heartbeat_attempts;
 static Uint32 host_retry_time;
 static char start_metadata[LINEMSG_SIZE * 6 + 64];
+/* A hosted game stays listed. When the lobby connection drops after the game was
+ * listed (the lobby server restarting, a network hiccup), the game is listed again
+ * in the background instead of the host's lobby being torn down with everyone in it.
+ * started_metadata keeps what game_started sent, to send again after a re-listing. */
+static TbBool host_listing_wanted;
+static TbBool host_was_listed;
+static int host_relist_attempts;
+static Uint32 host_relist_time;
+static Uint32 host_unlisted_since;
+static char started_metadata[sizeof(start_metadata)];
 static PunchAddresses queued_punch[MATCHMAKING_SESSIONS_MAX];
 static int queued_punch_read;
 static int queued_punch_count;
@@ -260,6 +276,7 @@ static int websocket_receive(const char *expected_type, VALUE *response, int tim
             continue;
         }
         if (result != CURLE_OK || !frame || (frame->flags & CURLWS_CLOSE)) {
+            LbNetLog("Matchmaking: the lobby connection ended (%s)\n", result != CURLE_OK ? curl_easy_strerror(result) : "closed by the server");
             break;
         }
         if (frame->flags & (CURLWS_PING | CURLWS_PONG)) {
@@ -267,6 +284,7 @@ static int websocket_receive(const char *expected_type, VALUE *response, int tim
         }
         receive_length += bytes_received;
         if (receive_length >= sizeof(receive_message) - 1) {
+            LbNetLog("Matchmaking: the lobby sent a message too long to read\n");
             break;
         }
         if (frame->bytesleft || (frame->flags & CURLWS_CONT)) {
@@ -276,6 +294,7 @@ static int websocket_receive(const char *expected_type, VALUE *response, int tim
         receive_length = 0;
         VALUE message = {0};
         if (json_dom_parse(receive_message, bytes_received, NULL, 0, &message, NULL) != 0) {
+            LbNetLog("Matchmaking: the lobby sent a message that could not be read\n");
             value_fini(&message);
             break;
         }
@@ -313,6 +332,8 @@ static int websocket_receive(const char *expected_type, VALUE *response, int tim
                 start_metadata[0] = '\0';
             }
         } else if (hosted_lobby_id[0] && (strcmp(type, "error") == 0 || strcmp(type, "timed_out") == 0)) {
+            const char *error = value_string(value_dict_get(&message, "error"));
+            LbNetLog("Matchmaking: the lobby ended the hosted game (%s%s%s)\n", type, error ? ": " : "", error ? error : "");
             failed = 1;
         }
         value_fini(&message);
@@ -433,6 +454,16 @@ static int matchmaking_connect_thread(void *request)
             snprintf(hosted_lobby_id, sizeof(hosted_lobby_id), "%s", id);
             heartbeat_time = (Uint32)SDL_GetTicks();
             heartbeat_attempts = 0;
+            if (host_was_listed) {
+                LbNetLog("Matchmaking: the game is listed again\n");
+            }
+            host_was_listed = true;
+            host_relist_attempts = 0;
+            if (started_metadata[0]) {
+                // Listed again after the game started: say so again, with its map
+                snprintf(start_metadata, sizeof(start_metadata), "%s", started_metadata);
+                host_retry_time = (Uint32)SDL_GetTicks();
+            }
             result = 0;
         } else {
             websocket_cleanup();
@@ -471,6 +502,10 @@ void matchmaking_disconnect(enum NetSessionPhase phase)
     SDL_WaitThread(resolve_thread, NULL);
     resolve_thread = NULL;
     SDL_LockMutex(mutex);
+    host_listing_wanted = false;
+    host_was_listed = false;
+    host_relist_attempts = 0;
+    started_metadata[0] = '\0';
     if (curl_handle && hosted_lobby_id[0]) {
         const char *action = "cancel";
         if (phase == NetPhase_InGame) {
@@ -494,6 +529,7 @@ void matchmaking_start_game(int map_number, const char *map_name)
     net_json_escape(escaped_map_name, sizeof(escaped_map_name), map_name);
     SDL_LockMutex(mutex);
     snprintf(start_metadata, sizeof(start_metadata), "\"mapNumber\":%d,\"mapName\":\"%s\",", map_number, escaped_map_name);
+    snprintf(started_metadata, sizeof(started_metadata), "%s", start_metadata);
     host_retry_time = (Uint32)SDL_GetTicks();
     SDL_UnlockMutex(mutex);
 }
@@ -557,6 +593,13 @@ int matchmaking_create(const char *udp_ipv4, int udp_ipv4_port, int udp_ipv6_por
     create_addresses.ipv4_port = udp_ipv4_port;
     create_addresses.ipv6_port = udp_ipv6_port;
     create_addresses.direct_ipv4_port = direct_ipv4_port;
+    // No lock: the list connection may hold it for seconds, and nothing else reads these
+    // until the thread below starts (the previous create thread has ended above)
+    host_listing_wanted = true;
+    host_was_listed = false;
+    host_relist_attempts = 0;
+    host_relist_time = 0;
+    started_metadata[0] = '\0';
     create_thread = SDL_CreateThread(matchmaking_create_thread, "matchmaking_host", connection_thread);
     if (!create_thread) {
         return -1;
@@ -639,6 +682,9 @@ void matchmaking_service(void)
     now = (Uint32)SDL_GetTicks();
     if (curl_handle && hosted_lobby_id[0] && (int)(heartbeat_time - now) <= 0) {
         if (heartbeat_attempts >= HEARTBEAT_FAILURE_LIMIT || websocket_send("{\"action\":\"ping\"}") != 0) {
+            if (heartbeat_attempts >= HEARTBEAT_FAILURE_LIMIT) {
+                LbNetLog("Matchmaking: the lobby stopped answering\n");
+            }
             websocket_cleanup();
         } else {
             heartbeat_attempts++;
@@ -664,9 +710,28 @@ int matchmaking_poll_punch(PunchAddresses *output)
         return 0;
     }
     int result = 0;
+    TbBool relist = false;
     if (!hosted_lobby_id[0] && SDL_GetThreadState(create_thread) != SDL_THREAD_ALIVE) {
-        result = -1;
+        if (!host_listing_wanted || !host_was_listed) {
+            // Never listed: the lobby could not be reached in the first place
+            result = -1;
+        } else {
+            Uint32 now = (Uint32)SDL_GetTicks();
+            if (host_relist_attempts == 0) {
+                host_unlisted_since = now;
+            }
+            if (host_relist_attempts == 0 || (int32_t)(now - host_relist_time) >= 0) {
+                const int last_delay = (int)(sizeof(relist_delays_ms) / sizeof(relist_delays_ms[0])) - 1;
+                host_relist_time = now + relist_delays_ms[host_relist_attempts < last_delay ? host_relist_attempts : last_delay];
+                host_relist_attempts++;
+                relist = true;
+            }
+            if ((Uint32)(now - host_unlisted_since) >= RELIST_REPORT_AFTER_MS) {
+                result = -1;
+            }
+        }
     }
+    const int attempt = host_relist_attempts;
     if (queued_punch_count > 0) {
         *output = queued_punch[queued_punch_read];
         queued_punch_read = (queued_punch_read + 1) % MATCHMAKING_SESSIONS_MAX;
@@ -674,5 +739,10 @@ int matchmaking_poll_punch(PunchAddresses *output)
         result = 1;
     }
     SDL_UnlockMutex(mutex);
+    if (relist) {
+        LbNetLog("Matchmaking: the hosted game is no longer listed; listing it again (attempt %d)\n", attempt);
+        SDL_WaitThread(create_thread, NULL);
+        create_thread = SDL_CreateThread(matchmaking_create_thread, "matchmaking_host", NULL);
+    }
     return result;
 }
