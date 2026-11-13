@@ -4511,12 +4511,22 @@ static void use_power_on_players_creatures_check(const struct ScriptLine* scline
         DEALLOCATE_SCRIPT_VALUE
         return;
     }
-    // This edition: script levels are 1~9 for every power that has levels, as before #5592.
-    // Keying the range check on do_not_expand skipped it for FREEZE, SLOW, FLIGHT and REBOUND,
-    // which have a price per level: level N cost level N+1's price, and 9 read cost[9], one
-    // past the end. Slap and Imp have no levels and take the number as written, as they always
-    // did, but it still indexes cost[], so it must be 0~8.
-    if ((pwr_id == PwrK_SLAP) || (pwr_id == PwrK_MKDIGGER))
+    // This edition: the powers this command took before #5592 keep their script levels, 1~9
+    // (Slap and Imp: the number as written). Keying the range check on do_not_expand skipped it
+    // for FREEZE, SLOW, FLIGHT and REBOUND, which have a price per level: level N cost level
+    // N+1's price, and 9 read cost[9], one past the end. Powers it did not take before (custom
+    // ones, Possess, ...) follow the team's rule -- no overcharge means the number as written --
+    // so maps written for their build mean the same here. A number as written still indexes
+    // cost[], so it must be 0~8.
+    TbBool legacy_levelled_power = (pwr_id == PwrK_HEALCRTR) || (pwr_id == PwrK_SPEEDCRTR) ||
+        (pwr_id == PwrK_PROTECT) || (pwr_id == PwrK_REBOUND) || (pwr_id == PwrK_CONCEAL) ||
+        (pwr_id == PwrK_DISEASE) || (pwr_id == PwrK_CHICKEN) || (pwr_id == PwrK_FREEZE) ||
+        (pwr_id == PwrK_SLOW) || (pwr_id == PwrK_FLIGHT) || (pwr_id == PwrK_VISION) ||
+        (pwr_id == PwrK_CALL2ARMS) || (pwr_id == PwrK_LIGHTNING) || (pwr_id == PwrK_CAVEIN) ||
+        (pwr_id == PwrK_SIGHT) || (pwr_id == PwrK_TIMEBOMB);
+    TbBool level_as_written = (pwr_id == PwrK_SLAP) || (pwr_id == PwrK_MKDIGGER) ||
+        (!legacy_levelled_power && (powerst->overcharge_check_idx == OcC_do_not_expand));
+    if (level_as_written)
     {
         if (power_level > POWER_MAX_LEVEL) // unsigned: a negative level wraps above it
         {
