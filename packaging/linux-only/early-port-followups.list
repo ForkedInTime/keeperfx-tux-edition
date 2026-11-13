@@ -37,3 +37,12 @@ b520ee28cd83 d4c0f7ebd473 skip feature: the redesigned multiplayer lobby
 1b8545219ed0 f75ddc07b5c5 skip only power_hand_is_empty(player) -> (get_local_user()): the hand moves to each user; the pickup-priority fix's lines are untouched
 f5bcdf10e468 f75ddc07b5c5 skip multi-user only: refuses a creature another user already possesses, handles a slap from another user during the zoom-in, set_player_lens -> set_user_lens; no change to the possession camera fix
 8ea409b1ce23 f75ddc07b5c5 skip init_player_cameras moves its body into init_user_dungeon_camera unchanged, and a rejoining user resets only its own camera; the chicken-peck fix (update_first_person_position) is untouched
+
+# --- The 2026-11-13 sync (9dc7f139f): the team's client-side hand against the pickup-priority early port ---
+
+# #5611 draws the local player's hand ahead of the game turn (local_hand.c). In update_dig_highlight it
+# changes only which hand the "empty hand, no dig highlight" test reads; the early port's rule is unchanged.
+# Stable has no local_hand.c, so these lines cannot be taken without the whole feature.
+1b8545219ed0 caa8cc5dd5c9 skip feature: client-side hand; the empty-hand test reads the local user's predicted hand (ustate->num_things_in_hand) instead of power_hand_is_empty, the roomspace call takes ustate
+1b8545219ed0 41def8288dcc skip its hunks here are the exact reverse of caa8cc5dd (the team's merge accident); the rest is co-op pickup of a possessed creature, a feature
+1b8545219ed0 97cb084dade9 skip the re-landing of caa8cc5dd; its hunks here are identical to caa8cc5dd's
