@@ -4499,12 +4499,33 @@ static void use_power_on_players_creatures_check(const struct ScriptLine* scline
         DEALLOCATE_SCRIPT_VALUE
         return;
     }
-    if ((powerst->can_cast_flags & PwCast_AllCrtrs) == 0)
+    // This edition: the ground powers this command always took (cast where each creature
+    // stands) stay accepted. The team's check refuses them for want of a creature flag, and
+    // only its missing return let them through: logged as errors at the top level, dropped
+    // inside an IF.
+    TbBool legacy_ground_power = (pwr_id == PwrK_SIGHT) || (pwr_id == PwrK_CALL2ARMS) ||
+        (pwr_id == PwrK_CAVEIN) || (pwr_id == PwrK_LIGHTNING) || (pwr_id == PwrK_MKDIGGER);
+    if (((powerst->can_cast_flags & PwCast_AllCrtrs) == 0) && !legacy_ground_power)
     {
         SCRPTERRLOG("Power %s cannot be cast on a Creature", power_code_name(pwr_id));
         DEALLOCATE_SCRIPT_VALUE
+        return;
     }
-    if (powerst->overcharge_check_idx != OcC_do_not_expand)
+    // This edition: script levels are 1~9 for every power that has levels, as before #5592.
+    // Keying the range check on do_not_expand skipped it for FREEZE, SLOW, FLIGHT and REBOUND,
+    // which have a price per level: level N cost level N+1's price, and 9 read cost[9], one
+    // past the end. Slap and Imp have no levels and take the number as written, as they always
+    // did, but it still indexes cost[], so it must be 0~8.
+    if ((pwr_id == PwrK_SLAP) || (pwr_id == PwrK_MKDIGGER))
+    {
+        if (power_level > POWER_MAX_LEVEL) // unsigned: a negative level wraps above it
+        {
+            SCRPTERRLOG("Power %s level %d out of range. Acceptible values are %d~%d", pwr_name, power_level, 0, POWER_MAX_LEVEL);
+            DEALLOCATE_SCRIPT_VALUE
+            return;
+        }
+    }
+    else
     {
         if ((power_level < 1) || (power_level > MAGIC_OVERCHARGE_LEVELS))
         {
