@@ -4473,6 +4473,7 @@ static void use_power_on_players_creatures_check(const struct ScriptLine* scline
     PlayerNumber caster_player = scline->np[2];
     const char* pwr_name = scline->tp[3];
     short pwr_id = get_rid(power_desc, pwr_name);
+    struct PowerConfigStats* powerst = get_power_model_stats(pwr_id);
     KeepPwrLevel power_level = scline->np[4];
     short free = scline->np[5];
     if (free == -1)
@@ -4498,24 +4499,44 @@ static void use_power_on_players_creatures_check(const struct ScriptLine* scline
         DEALLOCATE_SCRIPT_VALUE
         return;
     }
-    switch (pwr_id)
+    // This edition: the ground powers this command always took (cast where each creature
+    // stands) stay accepted. The team's check refuses them for want of a creature flag, and
+    // only its missing return let them through: logged as errors at the top level, dropped
+    // inside an IF.
+    TbBool legacy_ground_power = (pwr_id == PwrK_SIGHT) || (pwr_id == PwrK_CALL2ARMS) ||
+        (pwr_id == PwrK_CAVEIN) || (pwr_id == PwrK_LIGHTNING) || (pwr_id == PwrK_MKDIGGER);
+    if (((powerst->can_cast_flags & PwCast_AllCrtrs) == 0) && !legacy_ground_power)
     {
-    case PwrK_HEALCRTR:
-    case PwrK_SPEEDCRTR:
-    case PwrK_PROTECT:
-    case PwrK_REBOUND:
-    case PwrK_CONCEAL:
-    case PwrK_DISEASE:
-    case PwrK_CHICKEN:
-    case PwrK_FREEZE:
-    case PwrK_SLOW:
-    case PwrK_FLIGHT:
-    case PwrK_VISION:
-    case PwrK_CALL2ARMS:
-    case PwrK_LIGHTNING:
-    case PwrK_CAVEIN:
-    case PwrK_SIGHT:
-    case PwrK_TIMEBOMB:
+        SCRPTERRLOG("Power %s cannot be cast on a Creature", power_code_name(pwr_id));
+        DEALLOCATE_SCRIPT_VALUE
+        return;
+    }
+    // This edition: the powers this command took before #5592 keep their script levels, 1~9
+    // (Slap and Imp: the number as written). Keying the range check on do_not_expand skipped it
+    // for FREEZE, SLOW, FLIGHT and REBOUND, which have a price per level: level N cost level
+    // N+1's price, and 9 read cost[9], one past the end. Powers it did not take before (custom
+    // ones, Possess, ...) follow the team's rule -- no overcharge means the number as written --
+    // so maps written for their build mean the same here. A number as written still indexes
+    // cost[], so it must be 0~8.
+    TbBool legacy_levelled_power = (pwr_id == PwrK_HEALCRTR) || (pwr_id == PwrK_SPEEDCRTR) ||
+        (pwr_id == PwrK_PROTECT) || (pwr_id == PwrK_REBOUND) || (pwr_id == PwrK_CONCEAL) ||
+        (pwr_id == PwrK_DISEASE) || (pwr_id == PwrK_CHICKEN) || (pwr_id == PwrK_FREEZE) ||
+        (pwr_id == PwrK_SLOW) || (pwr_id == PwrK_FLIGHT) || (pwr_id == PwrK_VISION) ||
+        (pwr_id == PwrK_CALL2ARMS) || (pwr_id == PwrK_LIGHTNING) || (pwr_id == PwrK_CAVEIN) ||
+        (pwr_id == PwrK_SIGHT) || (pwr_id == PwrK_TIMEBOMB);
+    TbBool level_as_written = (pwr_id == PwrK_SLAP) || (pwr_id == PwrK_MKDIGGER) ||
+        (!legacy_levelled_power && (powerst->overcharge_check_idx == OcC_do_not_expand));
+    if (level_as_written)
+    {
+        if (power_level > POWER_MAX_LEVEL) // unsigned: a negative level wraps above it
+        {
+            SCRPTERRLOG("Power %s level %d out of range. Acceptible values are %d~%d", pwr_name, power_level, 0, POWER_MAX_LEVEL);
+            DEALLOCATE_SCRIPT_VALUE
+            return;
+        }
+    }
+    else
+    {
         if ((power_level < 1) || (power_level > MAGIC_OVERCHARGE_LEVELS))
         {
             SCRPTERRLOG("Power %s level %d out of range. Acceptible values are %d~%d", pwr_name, power_level, 1, MAGIC_OVERCHARGE_LEVELS);
@@ -4523,15 +4544,8 @@ static void use_power_on_players_creatures_check(const struct ScriptLine* scline
             return;
         }
         power_level--; // transform human 1~9 range into computer 0~8 range
-        break;
-    case PwrK_SLAP:
-    case PwrK_MKDIGGER:
-        break;
-    default:
-        SCRPTERRLOG("Power not supported for this command: %s", power_code_name(pwr_id));
-        DEALLOCATE_SCRIPT_VALUE
-        return;
     }
+
     value->shorts[1] = crtr_id;
     value->shorts[2] = pwr_id;
     value->shorts[3] = power_level;
