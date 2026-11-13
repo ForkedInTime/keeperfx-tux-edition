@@ -364,7 +364,10 @@ src/legacy_progress_lp64.c \
 src/kfx/save/SaveCampaignProgress.cpp \
 src/local_possession.c \
 src/net_checksum_turn.c \
-src/net_filecheck.c
+src/net_filecheck.c \
+src/local_camera_hand_fp.c \
+src/local_hand.c \
+src/power_hand_fp.c
 
 KFX_C_SOURCES = $(filter %.c,$(KFX_SOURCES))
 KFX_CXX_SOURCES = $(filter %.cpp,$(KFX_SOURCES))

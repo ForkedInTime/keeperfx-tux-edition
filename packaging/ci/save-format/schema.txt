@@ -1,4 +1,4 @@
-format 1.10
+format 1.11
 ActionPoint.activated u16 - save,sync
 ActionPoint.exists bool8 - save,sync
 ActionPoint.mappos struct:Coord2d - save,sync
@@ -1259,6 +1259,11 @@ UserState.cursor_subtile_y i32 - save,sync
 UserState.custom_lens str [64] save,sync
 UserState.dungeon_camera struct:DungeonCamera - save,sync
 UserState.first_person_dig_claim_mode bool8 - save,sync
+UserState.fp_hand_drop_turn u32 - save,sync
+UserState.fp_hand_drop_z i32 - save,sync
+UserState.fp_hand_pickup_turn u32 - save,sync
+UserState.fp_hand_x i32 - save,sync
+UserState.fp_hand_y i32 - save,sync
 UserState.full_slab_cursor u8 - save,sync
 UserState.hand_animationId i32 - save,sync
 UserState.hand_animation_until_turn u32 - save,sync

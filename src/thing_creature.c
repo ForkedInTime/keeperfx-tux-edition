@@ -81,6 +81,7 @@
 #include "player_utils.h"
 #include "config_players.h"
 #include "power_hand.h"
+#include "power_hand_fp.h"
 #include "power_process.h"
 #include "room_data.h"
 #include "room_graveyard.h"
@@ -1830,6 +1831,7 @@ void process_thing_spell_teleport_effects(struct Thing *thing, struct CastedSpel
             {
                 room_pos.x.val = subtile_coord_center(room->central_stl_x);
                 room_pos.y.val = subtile_coord_center(room->central_stl_y);
+                room_pos.z.val = get_floor_height_at(&room_pos);
                 allowed = creature_can_navigate_to(thing, &room_pos, NavRtF_NoOwner);
                 if (!allowed)
                 {
@@ -2079,6 +2081,10 @@ void creature_cast_spell_at_thing(struct Thing *castng, struct Thing *targetng, 
 
 void teleport_familiar_to_summoner(struct Thing *famlrtng, struct Thing* creatng)
 {
+    // A familiar held in a hand is off the map; moving it would put it back on the
+    // map while still held, and dropping it later would break the map's thing lists
+    if (thing_is_picked_up(famlrtng))
+        return;
     create_effect(&famlrtng->mappos, imp_spangle_effects[get_player_color_idx(famlrtng->owner)], famlrtng->owner);
     move_thing_in_map(famlrtng, &creatng->mappos);
     cleanup_current_thing_state(famlrtng);
@@ -2378,21 +2384,22 @@ void creature_cast_spell(struct Thing *castng, SpellKind spl_idx, CrtrExpLevel s
     }
 }
 
+TbBool creature_counts_in_dungeon_stats(const struct Thing *creatng)
+{
+    if (is_hero_thing(creatng) || is_neutral_thing(creatng)) {
+        return false;
+    }
+    if (thing_is_picked_up(creatng) || creature_is_being_unconscious(creatng)) {
+        return false;
+    }
+    const struct CreatureControl *cctrl = creature_control_get_from_thing(creatng);
+    return !flag_is_set(cctrl->creature_state_flags, TF2_SummonedCreature);
+}
+
 void update_creature_count(struct Thing *creatng)
 {
     TRACE_THING(creatng);
-    struct CreatureControl* cctrl;
-    if (!thing_exists(creatng)) {
-        return;
-    }
-    if (is_hero_thing(creatng) || is_neutral_thing(creatng)) {
-        return;
-    }
-    if (thing_is_picked_up(creatng) || creature_is_being_unconscious(creatng)) {
-        return;
-    }
-    cctrl = creature_control_get_from_thing(creatng);
-    if (flag_is_set(cctrl->creature_state_flags, TF2_SummonedCreature)){
+    if (!thing_exists(creatng) || !creature_counts_in_dungeon_stats(creatng)) {
         return;
     }
     struct Dungeon* dungeon = get_players_num_dungeon(creatng->owner);
@@ -4138,8 +4145,9 @@ ThingIndex process_player_use_instance(struct Thing *thing, CrInstance inst_id, 
         {
             // If cannot find a valid target, do not use it and don't consider it used.
 
-            // Make a rejection sound
-            play_non_3d_sample(snd_refusal);
+            if (user_controls_thing(get_local_user(), thing, UCT_Direct | UCT_Other)) {
+                play_non_3d_sample(snd_refusal);
+            }
             return 0;
         }
     }
@@ -4167,6 +4175,10 @@ TbBool creature_instance_has_reset_at(const struct Thing *thing, const struct Cr
 TbBool possession_instance_can_start(struct Thing *thing, const struct CreatureControl *cctrl, CrInstance inst_id, GameTurn turn, const struct Packet *pckt, TbBool allow_unavailable)
 {
     if ((inst_id == CrInst_NULL) || (cctrl->instance_id != CrInst_NULL) || (thing->active_state == CrSt_CreatureSlapCowers)) {
+        return false;
+    }
+    // Carried in a hand, or just dropped from one
+    if (fp_hand_blocks_creature_commands(thing)) {
         return false;
     }
     if (!cctrl->instance_available[inst_id]) {
@@ -5252,7 +5264,7 @@ long player_list_creature_filter_most_experienced_and_pickable2(const struct Thi
         && (thing->class_id == param->class_id)
         && ((thing_matches_model(thing,param->model_id)))
         && ((param->primary_number == -1) || (get_creature_gui_job(thing) == param->primary_number))
-        && !thing_is_picked_up(thing) && !thing_is_possessed(thing)
+        && !thing_is_picked_up(thing)
         && (thing->active_state != CrSt_CreatureUnconscious) && (nmaxim > maximizer) )
     {
         if (can_thing_be_picked_up2_by_player(thing, param->plyr_idx))
@@ -5335,7 +5347,7 @@ long player_list_creature_filter_least_experienced_and_pickable2(const struct Th
       && (thing->class_id == param->class_id)
       && ((thing_matches_model(thing,param->model_id)))
       && ((param->primary_number == -1) || (get_creature_gui_job(thing) == param->primary_number))
-      && !thing_is_picked_up(thing) && !thing_is_possessed(thing)
+      && !thing_is_picked_up(thing)
       && (thing->active_state != CrSt_CreatureUnconscious) && (nmaxim > maximizer) )
     {
       if (can_thing_be_picked_up2_by_player(thing, param->plyr_idx))
@@ -5411,7 +5423,7 @@ long player_list_creature_filter_of_gui_job_and_pickable2(const struct Thing *th
     if ( ((param->plyr_idx == -1) || (thing->owner == param->plyr_idx))
       && (thing->class_id == param->class_id)
       && ((thing_matches_model(thing,param->model_id)))
-      && !thing_is_picked_up(thing) && !thing_is_possessed(thing)
+      && !thing_is_picked_up(thing)
       && ((param->primary_number == -1) || (get_creature_gui_job(thing) == param->primary_number))
       && (thing->active_state != CrSt_CreatureUnconscious) )
     {
@@ -6265,7 +6277,7 @@ HitPoints apply_damage_to_thing_and_display_health(struct Thing *thing, HitPoint
         cdamage = 0;
     }
     if (cdamage > 0) {
-        thing->creature.health_bar_turns = 8;
+        thing->creature.health_bar_turns = HEALTH_BAR_FLASH_TURNS;
     }
     return cdamage;
 }
