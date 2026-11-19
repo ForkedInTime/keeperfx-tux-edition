@@ -78,10 +78,7 @@ static int map_get_field(lua_State *L){
     } else if (strcmp(key, "height") == 0) {          
         lua_pushinteger(L, game.map_tiles_y);
     } else if (strcmp(key, "default_texture") == 0) {
-        // game.texture_id is the 0-based texture file index (tmapa000.dat = 0), as the
-        // level loader, the reload after a saved game and the creature code all read it;
-        // the named packs are numbered from 1 ("STANDARD" = 1 = file 0). Upstream's #5583.
-        const char *name = get_conf_parameter_text(texture_pack_desc, game.texture_id + 1);
+        const char *name = get_conf_parameter_text(texture_pack_desc, game.texture_id+1);
         if (name[0] != '\0') {
             lua_pushstring(L, name);                    // "STANDARD", "ANCIENT", ...
         } else {
@@ -99,28 +96,12 @@ static int map_set_field(lua_State *L) {
 
     if (strcmp(key, "default_texture") == 0) {
         LevelNumber lvnumb = get_loaded_level_number();
-        if (lua_isnumber(L, 3)) {
-            // Integer input is the 0-based file index: ID 0 = tmapa000.dat, stored as is.
-            // (It used to be stored 1-based, one above what everything else reads, so a
-            // saved game reloaded the next texture, and so did the getter once #5583 fixed
-            // it for the map's own value.) Negative values mean no-op.
-            // TODO: align with PLAYER:set_texture() where negative values trigger a reset.
-            long texture_id = lua_tointeger(L, 3);
-            if (texture_id >= 0)
-            {
-                game.texture_id = texture_id;
-                load_texture_map_file(texture_id, lvnumb, get_level_fgroup(lvnumb));
-            }
-        } else {
-            // String input uses texture_pack_desc values ("STANDARD"=1, "ANCIENT"=2, ...),
-            // one above the 0-based file index that is stored and loaded.
-            // "NONE"=0 has no file: nothing changes, as for a negative number.
-            long texture_id = luaL_checkNamedCommand(L, 3, texture_pack_desc);
-            if (texture_id > 0)
-            {
-                game.texture_id = texture_id - 1;
-                load_texture_map_file(texture_id - 1, lvnumb, get_level_fgroup(lvnumb));
-            }
+        // NONE, DEFAULT and a negative number are ignored: the .inf texture is always a file, so it has no Default of its own.
+        long slot = luaL_checkTexturePack(L, 3);
+        if (slot > 0)
+        {
+            game.texture_id = slot - 1;
+            load_texture_map_file(game.texture_id, lvnumb, get_level_fgroup(lvnumb));
         }
         return 0;
     }
