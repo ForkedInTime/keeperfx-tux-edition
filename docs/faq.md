@@ -13,6 +13,13 @@ so a save on a level whose script keeps functions (Pandaemonium and Heroes' Jour
 opens in 1.4.0.6072 and later, but not in 1.4.0.6062 or the 1.4.0.6013 alpha. Saves on other levels
 are not affected.
 
+And one more, from the 1.4.0.6259 alpha (19 November 2026) on: **a game saved there doesn't open in
+1.4.0.6199 or earlier**, stable 1.4.0.6103 included. The KeeperFX team made room for eight players, a save
+now holds eight player slots, and the older builds refuse a save with more slots than they have. The
+other way round is fine: games saved by 1.4.0.6103 and 1.4.0.6199 load in the new alpha. So if you go back
+from that alpha to stable 1.4.0.6103, your stable saves are where you left them, and the games you saved
+on the alpha wait for the next stable, which reads them.
+
 In practice: a campaign tells you it needs the latest alpha, you switch to alpha, play it, then
 switch back to stable — and your stable saves are exactly where you left them. What you cannot do,
 across that change, is start a campaign on one channel and continue it on the other. Campaign
@@ -102,6 +109,11 @@ session that went wrong survives starting the game again. The launcher shows it 
 
 Report bugs in this fork **[here](https://github.com/ForkedInTime/keeperfx-tux-edition/issues)**, with
 the log attached, and not to the KeeperFX team: they don't build or ship this edition.
+
+When the game crashes, the launcher offers to report it: it saves a zip, usually in the game folder's
+`crash-reports/`, with the log, your settings, a save you pick and, if one was being recorded, the replay of
+the game that crashed, then opens a new issue here with the details filled in. Nothing is sent anywhere;
+you attach the zip and submit the issue yourself.
 
 ## Can I play online with friends on Windows?
 

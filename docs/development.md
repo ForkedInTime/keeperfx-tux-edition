@@ -114,7 +114,9 @@ After the sync PR is merged, a release is cut, and publishing it is the whole jo
 the game package (`full.7z`), the portable tarball and a small update patch from the previous release of
 each channel, and attaches them all to the release; a stable release also updates the AUR recipe. Each
 build layers the KeeperFX team's current data package over ours, so their new content arrives on its own
-rather than waiting to be noticed, and the artwork itself is regenerated from the team's FXGraphics repository on every build, and the game's text from their translations, so sprites and messages that arrive alongside new code arrive with it. The Flatpak is rebuilt on the 1st of each month (or by hand) and
+rather than waiting to be noticed, and the artwork itself is regenerated from the team's FXGraphics repository on every build, and the game's text from their translations, so sprites and messages that arrive alongside new code arrive with it. Sounds are
+not rebuilt: a sample new in the team's sound repository arrives with their next release, so a change that
+plays one waits until then (their Flame Breath hit sound, November 2026). The Flatpak is rebuilt on the 1st of each month (or by hand) and
 attached to the newest release of that day; in between, the launcher inside it offers new game releases
 like any other install. Existing installs are offered the new build by the launcher's built-in updater,
 which downloads the patch when one fits and the full package otherwise.

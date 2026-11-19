@@ -32,15 +32,15 @@ Wine, and the Linux-specific fixes, hardening and performance work below.
 > | 🧹 | **Linux-only source** — every Windows-only file and `#ifdef _WIN32` branch is stripped from the team's code before it is merged (281 files, ~101,000 lines at the switch), [proven](../packaging/linux-only/README.md) not to change what Linux compiles; a guard workflow keeps it from coming back | the whole tree |
 > | 🧮 | **64-bit & Windows-assumption fixes** — the game was written for 32-bit Windows: level-script argument slots, the software rasteriser's carries (creature shadows), signed game-turn arithmetic, movie-recorder and high-score file layouts, campaign progress and save titles written by earlier Linux builds, the light table in saved games, 64-bit config flags (the hand's), a network timeout; plus mod files in any letter case, `\` paths, Korean code page 949, an API-server SIGPIPE | ~20 fixes |
 > | 🛡️ | **Correctness & security hardening** — a multi-agent Linux audit (out-of-bounds writes from crafted maps/mods, union byte-aliasing, format-string bugs) plus a standing sanitizer pass (AddressSanitizer and UndefinedBehaviorSanitizer) that found six memory faults upstream has shipped since as far back as 2008, static analysis and valgrind runs (a heap overflow in map-script fills, mods that froze the game, a leak on every level start), map scripts that read files but cannot change them, run bytecode or call native code, and chat and replays that can no longer act on your machine | ~60 fixes |
-> | 🎮 | **Gameplay bugs found in players' games** — workers quitting a room they cross or step off, endless scavenger re-enrolment, imps and the computer repeating trips that cannot succeed, trap-crate and hatchery counts, rebirth, doors, explosions, abyss kills, the Call to Arms charge bar, script commands that missed the creatures already on the map, replays that fell a turn behind after a save, creatures choosing steps from leftover memory, and saves on levels that bring their own config files | ~30 fixes |
-> | 💥 | **Crash fixes** — ultrawide creature-possession, UTF-8 fonts, campaign scripts, clean exit, case-sensitive audio, the startup error dialog without libXrandr, Lua errors that closed the game, the creature-list corruption **root-fixed** | ~10 fixes |
+> | 🎮 | **Gameplay bugs found in players' games** — workers quitting a room they cross or step off, endless scavenger re-enrolment, imps and the computer repeating trips that cannot succeed, trap-crate and hatchery counts, rebirth, doors, explosions, abyss kills, the Call to Arms charge bar, script commands that missed the creatures already on the map, replays that fell a turn behind after a save, creatures choosing steps from leftover memory, saves on levels that bring their own config files, and treasure rooms with modded gold settings | ~30 fixes |
+> | 💥 | **Crash fixes** — ultrawide creature-possession, UTF-8 fonts, campaign scripts, clean exit, case-sensitive audio, the startup error dialog without libXrandr, Lua errors that closed the game, Must Obey in a game saved by an earlier version, the creature-list corruption **root-fixed** | ~10 fixes |
 > | ⚡ | **Performance** — frame pacing matched to your monitor, cached parchment map view, per-turn CPU busy-spin, sprite/text blit, GUI hot paths, cached instant-load Workshop | 8 wins |
 > | 🎨 | **Graphics & audio** — upstream's OpenGL renderer built into the Linux binary and made the default (software when OpenGL cannot start), full sharpness on a scaled desktop, front-end movies in any codec and in full colour on either renderer, your own music in any filenames and any of OGG/FLAC/WAV/MP3, a real window icon and desktop identity on X11 *and* Wayland, artwork (and the game's text) regenerated from upstream's sources on every build | 6 items |
-> | 🌐 | **Multiplayer** — this edition's own lobby server (nothing goes to the team's servers, checked on every build), the Classic, Modern and Original mappacks loading in every install method, two ways a game fell out of step closed with the team's fixes ahead of a sync, and the team's same-files check before a match without it telling the host about your other files | 5 items |
-> | 🧰 | **Launcher & tooling** — in-launcher Workshop browser + Installed manager, Mod Manager, Play ▾ menu, built-in updater with **separate stable and alpha channels**, side-by-side log viewer, the last five game logs kept, your own notes in `keeperfx.cfg` kept, music download + recovery, single-instance lock, weekly sync bot, a weekly Arch library watch, a daily check for the team's later fixes to anything taken early | 14+ items |
+> | 🌐 | **Multiplayer** — this edition's own lobby server (nothing goes to the team's servers, checked on every build), the Classic, Modern and Original mappacks loading in every install method, two ways a game fell out of step closed with the team's fixes ahead of a sync, the team's same-files check before a match without it telling the host about your other files, a hosted game that survives losing the lobby, and eight players | 7 items |
+> | 🧰 | **Launcher & tooling** — in-launcher Workshop browser + Installed manager, Mod Manager, Play ▾ menu, built-in updater with **separate stable and alpha channels**, side-by-side log viewer, the last five game logs kept, your own notes in `keeperfx.cfg` kept, a Replays window that finds the replays, crash reports that stay on your computer, saves backed up before an update, music download + recovery, single-instance lock, weekly sync bot, a weekly Arch library watch, a daily check for the team's later fixes to anything taken early | 17+ items |
 >
 > <sub>Count it yourself: `git log --oneline --no-merges --invert-grep --grep='^Linux-Snapshot-Of:' upstream/master..HEAD`
-> — 494 commits on top of the team's master, snapshot commits excluded; 23 of them are the team's own fixes, taken ahead of a
+> — 519 commits on top of the team's master, snapshot commits excluded; 23 of them are the team's own fixes, taken ahead of a
 > sync, and keep their authors. The sections below are the line items.</sub>
 
 ## Every change, area by area
@@ -173,6 +173,19 @@ it, with pictures: [the launcher's screenshots](https://github.com/ForkedInTime/
   the game log side by side, following live, with a Copy button — and errors now offer a **Show log**
   button directly. The news panel lists this fork's releases (version and date, one line each, the
   full changelog one click away, stable ones with a golden keeper) above the KeeperFX team's news.
+- **Replays that are there.** Play ▾ → *Replays…* lists the replays the game records, by campaign, free play
+  and multiplayer, and plays the one you pick. The team's *Run packetfile* looked for `*.pck` files in the
+  game folder and so found none of the `.fxpkt` replays the engine saves under `replays/`.
+- **Crash reports stay on your computer until you send them.** The team's crash dialog uploaded the report
+  (your description, contact details, `keeperfx.cfg`, `keeperfx.log`, optionally a save) to their server.
+  Here it is saved as a zip on your computer, with the replay of the game that crashed if one was being
+  recorded, and a new issue on this edition's tracker opens with the details filled in; nothing goes
+  anywhere until you attach the zip and submit it. Only a real replay file from the game folder can go in,
+  whatever the log says.
+- **Your saves are backed up before an update again.** Since the October 2026 save format the launcher
+  could not read a save's title, so it left every save out of its lists, and its "back up saves before
+  updating" step archived nothing. It reads the new format now (only the title, with every read checked
+  against the file), and the backup takes every save file, whether or not its title can be read.
 - **Your own notes in `keeperfx.cfg` stay.** After an update the launcher wrote the file again from the
   release's copy of the defaults, so comment lines you had added, and the file's order, were gone the first
   time it started. Now your file stays as it is: values change on their own lines, and a setting it lacks is
@@ -214,6 +227,13 @@ it, with pictures: [the launcher's screenshots](https://github.com/ForkedInTime/
   are listed. Measured with two copies of the game: a changed `fxdata/rules.cfg` is named and both go back
   to the lobby; a script that loads a file from outside the game's folder, by a relative or an absolute
   name, adds nothing to the list and the match starts.
+- **A hosted game survives losing the lobby.** When an online host's connection to the lobby dropped (the
+  server restarting, a network hiccup) the host was thrown back to the list with "Lost connection to server"
+  and everyone who had joined was disconnected. Now the game lists itself again in the background, at once
+  and then at growing intervals, keeps its players, and the host's lobby chat says while the game is off
+  the list; only a host left alone and unlisted for a minute is told it failed.
+- **Eight players through our lobby.** The team's November change allows up to eight players in a game;
+  this edition's lobby server lists and admits up to eight (it stopped at four).
 
 **Linux performance** *(engine-level optimizations specific to this native build — upstream is Windows-first and does not tune the GCC/Linux path, so these are ours)*
 - **Frame pacing matched to your monitor, whatever its refresh rate.** The shipped default draws as fast as
@@ -271,11 +291,19 @@ first.)
 - **Map scripts:** `SET_CREATURE_CONFIGURATION` missed the creatures already on the map and zeroed values
   left out; `MOVE_CREATURE` for `ALL_PLAYERS` spawned a stray effect; removing a sacrifice recipe from a
   full table doubled the last one; Lua lost `os.date` (Pandaemonium's second level stopped setting
-  itself up); a texture a level's Lua set with `Map.default_texture` read back one off and turned into the next
-  texture after a saved game was loaded (the team fixed the reading half in their #5583); `DESCRIPTION_GEO` boxes with a 0 or missing value were drawn at random places; an
+  itself up); `DESCRIPTION_GEO` boxes with a 0 or missing value were drawn at random places; an
   objective at a destroyed heart had no location; `SET_POWER_CONFIGURATION` set 0 for five of its
   fields, a power's top overcharge level charged its duration as the price, a matching `BLOCKED_PICKUP`
-  hand rule blocked instead of lifting the block, and party range checks could never be true.
+  hand rule blocked instead of lifting the block, and party range checks could never be true. After the
+  team's November changes: `USE_POWER_ON_PLAYERS_CREATURES` refused Sight, Call to Arms, Cave-In,
+  Lightning and Imp, and charged Freeze, Slow, Flight and Rebound one level up (level 9 read past the
+  price table); Lua's `ChangeSlabTexture` with a fill turned the area into another kind of slab instead of
+  retexturing it (in the team's code too); a `SET_TEXTURE` with a texture name it refused kept its slot among
+  the level's script commands.
+- **Treasure rooms:** the team's November fix fills a treasure room to its real gold capacity. Here the limit
+  is exactly what the room's hoards may hold, so with modded gold settings an imp no longer carries gold
+  from one full hoard to the next for ever; mods that name the `gold_slabs_div2` capacity, which the team
+  removed, keep it; and loose gold is gathered into the last space before the room counts as full.
 - **Levels with their own config files:** loading a save on one read the campaign's rules, objects and
   slabs instead of the level's (Pandaemonium level 4 fired its final assault on the reload) — the
   team's fix, taken ahead of a sync.
@@ -287,6 +315,16 @@ first.)
   multiplayer peers drifted apart; each now starts from the creature's own position.
 
 **Stability & security fixes** *(genuine upstream bugs fixed locally, plus faults in this fork's own Linux layer; two were reported upstream in June 2026, nothing since)*
+- **Games saved by an earlier version keep working after the team's November changes.** The team moved the
+  hand from the keeper to each player, added a field for a level's own Must Obey power, made room for
+  eight players and stored one script command's arguments differently, with nothing for saves made before.
+  Here a game saved by an earlier version keeps what the keeper held in the hand (the team's version drops
+  it at the heart); keeps Must Obey running instead of crashing on the first turn after loading (division
+  by zero, measured with a 1.4.0.6103 save); has four empty player slots instead of four extra red keepers
+  on screen; and still runs a waiting `SET_CREATURE_PROPERTY` on its creature (original level 20 makes its
+  second Avatar capturable that way). A replay from before the change reads its four players instead of
+  stopping at its first turn. The other direction can't be fixed in builds already released: a game saved
+  by this version doesn't open in 1.4.0.6199 or earlier.
 - **Files that came along for the ride are no longer treated as content.** Archives built on macOS or
   Windows carry a small hidden companion file beside every real one, and campaigns, mods and map packs
   reach a Linux install as archives. This fork's own directory scanner handed those companions to the game

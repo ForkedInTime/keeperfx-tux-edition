@@ -100,7 +100,7 @@ build; this edition is the Linux half they don't ship, plus the bugs found on th
   joining you. Nothing goes to the KeeperFX team's servers. Tux Edition plays Tux Edition: Windows
   KeeperFX can't join ([why](docs/faq.md#can-i-play-online-with-friends-on-windows)).
 
-494 commits on top of the team's `master`. **[Everything, item by item »](docs/whats-different.md)**
+519 commits on top of the team's `master`. **[Everything, item by item »](docs/whats-different.md)**
 
 ## Credit
 
