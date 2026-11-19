@@ -2112,7 +2112,9 @@ static int lua_Change_slab_texture(lua_State *L)
         iter_param.primary_number = texture_id;
         iter_param.secondary_number = fill_type;
         iter_param.tertiary_number = get_slabmap_block(slb_x, slb_y)->kind;
-        slabs_fill_iterate_from_slab(slb_x, slb_y, slabs_change_type, &iter_param);
+        // This edition: the texture, as CHANGE_SLAB_TEXTURE fills it -- slabs_change_type made each slab the
+        // slab kind numbered like the texture (1 = rock, 2 = gold, ...).
+        slabs_fill_iterate_from_slab(slb_x, slb_y, slabs_change_texture, &iter_param);
     }
     else
     {
