@@ -4,6 +4,86 @@ This tracks the changes in *this* fork on top of the KeeperFX team's `master`.
 Version numbers follow the engine build (`<major>.<minor>.<release>.<build>`), with
 `alpha` appended on the alpha channel and nothing appended on the stable one.
 
+## 1.4.0.6259 — 2026-11-19 — alpha
+
+**Saves go one way in this alpha.** Games saved by 1.4.0.6103 and 1.4.0.6199 load here, but a game saved
+here doesn't open in 1.4.0.6199 or earlier, stable 1.4.0.6103 included: the KeeperFX team made room for
+eight players, and the older builds refuse a save with more player slots than they have. If you go back to
+stable, your stable saves are where you left them, and the games saved on this alpha wait for the December
+stable.
+
+On top of the 1.4.0.6199 alpha: the KeeperFX team's work from 11 to 18 November (three syncs, about twenty
+changes), this edition's fixes to it, an online game that survives losing the lobby, and a launcher that
+backs up your saves again.
+
+**From the team**
+- **Multiplayer for up to eight players**, and **two players can share one keeper** by picking the same
+  colour in the lobby.
+- **Multiplayer feels quicker and holds on.** Your own pickups, drops and slaps show at once; a teammate can
+  pick up the creature you are possessing; a connection that drops for a few seconds no longer loses the
+  player; a chat command runs on the turn it was sent, on every machine.
+- **Fewer ways out of step.** Fixes for games between different systems (Lua's `pairs()` walks a table in a
+  fixed order, a write past the hero-gate list, a read before the tags list, random numbers from the wrong
+  pool, a score overflow) and a held familiar is no longer teleported.
+- **Treasure rooms fill to their real gold capacity** (they counted as full with up to a fifth of their gold
+  missing).
+- **Scripting.** A level can name its own Must Obey power; `SET_CREATURE_CONFIGURATION` can set Properties;
+  scripts can react to drops and landings and refuse pickups and drops; `USE_POWER_ON_PLAYERS_CREATURES`
+  takes custom powers; footprints and footstep sounds per texture come from `fxdata/tileset.toml`.
+- **For map authors:** a number given as a texture to Lua's `SetTexture`, `ChangeSlabTexture` or a slab's
+  `style` is now the texture file's number from 0, one below what it was (names are unchanged, and
+  `Map.default_texture` already counted this way here); the texture name `BIG_BREASTS` is gone, and
+  `FOOT_SNOW` and `FOOT_SPUR` are gone from `sounds.cfg`.
+- **Smaller:** a black cube on the parchment map, "(null)" for a name in a multiplayer error, a fix for rooms
+  next to a changed slab. The window title is this edition's name, "KeeperFX Tux Edition".
+- **Held back:** the Flame Breath hit sound. It plays a sample that is not in the sound data this edition
+  ships yet; it comes with the team's next release.
+
+**From this edition**
+- **Games saved by an earlier version keep working.** The team's changes left saves made before them to
+  fend for themselves; here a game saved by 1.4.0.6199 or 1.4.0.6103 keeps what the keeper held in the hand
+  (the team's version drops it at the heart), keeps Must Obey running instead of crashing on the first turn
+  after loading (a division by zero, reproduced with a 1.4.0.6103 save), has four empty player slots instead
+  of four extra red keepers on screen, and still runs a waiting `SET_CREATURE_PROPERTY` on its creature
+  (original level 20 makes its second Avatar capturable that way). A replay recorded before the change
+  reads its four players: one from 1.4.0.6199 plays here (the game warns it was made with another version),
+  where without this it stopped at its first turn.
+- **A hosted online game survives losing the lobby.** When the host's connection to the lobby dropped, the
+  host was thrown back to the list with "Lost connection to server" and everyone who had joined was
+  disconnected. Now the game lists itself again in the background and keeps its players, and the host's
+  lobby chat says while it is off the list. This edition's lobby server also lists and admits eight players.
+- **Map scripts.** `USE_POWER_ON_PLAYERS_CREATURES` after the team's change refused Sight, Call to Arms,
+  Cave-In, Lightning and Imp, and charged Freeze, Slow, Flight and Rebound one level up (level 9 read past the
+  price table); Lua's `ChangeSlabTexture` with a fill turned the area into another kind of slab instead of
+  retexturing it; a refused `SET_TEXTURE` name kept its slot among the level's script commands.
+- **Treasure rooms, after the team's fix:** the limit is exactly what the room's hoards may hold, so with
+  modded gold settings an imp no longer carries gold from one full hoard to the next for ever; mods naming
+  the `gold_slabs_div2` capacity, which the team removed, keep it; loose gold is gathered into the last space.
+- **Two network values bounded:** the chat history lookup, and the spectator icon the host sends.
+- **Launcher: your saves are backed up before an update again.** Since the October save format the launcher
+  could not read a save's title, so it left every save out of its lists and the "back up saves before
+  updating" step archived nothing for a month. It reads the new format now, and the backup takes every save
+  file. All 15 saves of a real install show their titles.
+- **Launcher: crash reports carry the replay.** The crash dialog's zip now also holds the replay of the game
+  that crashed, if one was being recorded (only a real replay file from the game folder), and the report
+  says how the game exited. Nothing is sent anywhere, as before.
+- **Launcher: the Replays window** (Play ▾ → *Replays…*, the team's October work) lists the replays the game
+  saves, by campaign, free play and multiplayer, including *Enable Packetsave* recordings, and plays them;
+  the team's *Run packetfile* it replaces found none of them. **The Settings window** takes the team's
+  layout with this edition's controls, nothing cut off in any of its languages and fitting small screens;
+  the About tab shows every line whole. The certificate bundle is Mozilla's of 5 November.
+
+**Compatibility.** Saves: one way, as above (save format 1.12). Replays from 1.4.0.6199 may play but aren't
+guaranteed (the game warns). Multiplayer needs the same build on both sides, as always.
+
+Checked on a clean build of this code, on hidden displays with no sound and multiplayer on a loopback-only
+network: the unit tests (14,607 and 31 checks), the save-format check, a game saved with Must Obey running by
+1.4.0.6103, by 1.4.0.6199 and by this build loaded here with Must Obey still charging, a 1.4.0.6103 save
+with no extra players, the menu and map-view checks (12/12, the same engine messages as 1.4.0.6199), two
+players by direct connection (19/19, no desync), replays from this build and from 1.4.0.6199, the lobby
+server's protocol tests (14/14), and the launcher's tests and its crash dialog (a real replay offered and
+zipped, a file outside the game folder refused).
+
 ## 1.4.0.6199 — 2026-11-10 — alpha
 
 On top of stable 1.4.0.6103: three weeks of the KeeperFX team's work (the 5 and 10 November syncs, about
