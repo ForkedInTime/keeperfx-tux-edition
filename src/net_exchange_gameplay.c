@@ -203,6 +203,10 @@ static TbBool run_chat_command(NetUserId user, const char *text, MapCoord cursor
 
 const struct QueuedGameplayChat *find_gameplay_chat(NetUserId user, GameTurn turn)
 {
+    // This edition: bounded here as well as by every caller, as receive_gameplay_chat_message() is.
+    if ((user < 0) || (user >= MAX_NET_USERS)) {
+        return NULL;
+    }
     const struct QueuedGameplayChat *chat = &gameplay_chat_history[user][turn % GAMEPLAY_CHAT_HISTORY_SIZE];
     if ((chat->turn != turn) || (chat->message[0] == '\0')) {
         return NULL;

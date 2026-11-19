@@ -136,7 +136,8 @@ TbBool network_user_is_spectator(NetUserId user_id)
 
 static void spectator_message_add(int32_t icon, const char *text)
 {
-    if (icon == 0) {
+    // This edition: the icon comes from the host (USERUPDATE); one past the creature icons draws none.
+    if ((icon <= 0) || (icon > SPECTATOR_ICON_COUNT)) {
         message_add(MsgType_Blank, 0, text);
         return;
     }
