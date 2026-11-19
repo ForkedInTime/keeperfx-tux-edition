@@ -5049,6 +5049,9 @@ static void set_texture_check(const struct ScriptLine *scline)
         else
         {
             SCRPTERRLOG("Invalid texture pack: '%s'", scline->tp[1]);
+            // This edition: give the value back, as every other refusal does; one left allocated
+            // in a condition would run later with no texture set in it.
+            DEALLOCATE_SCRIPT_VALUE
             return;
         }
     }
