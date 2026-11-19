@@ -1763,7 +1763,7 @@ struct Thing *get_next_unclaimed_gold_thing_pickable_by_digger(PlayerNumber owne
 int add_unclaimed_gold_to_imp_stack(struct Dungeon *dungeon, int max_tasks)
 {
     struct Room *room;
-    room = find_room_of_role_with_spare_capacity(dungeon->owner, RoRoF_GoldStorage, 1);
+    room = find_room_of_role_with_spare_gold_capacity(dungeon->owner, RoRoF_GoldStorage);
     if (room_is_invalid(room)) {
         return 0;
     }

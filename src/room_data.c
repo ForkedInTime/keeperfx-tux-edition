@@ -1881,6 +1881,44 @@ struct Room *find_room_of_role_with_spare_capacity(PlayerNumber owner, RoomRole 
     return INVALID_ROOM;
 }
 
+/**
+ * This edition: a gold room with gold to spare by #5625's test -- less gold than its hoards may
+ * hold -- rather than hoard units to spare, which rounds every hoard up and calls a room full
+ * while it can still take up to a fifth more gold. Any room the hoard-unit test finds, this finds.
+ */
+struct Room *find_room_of_role_with_spare_gold_capacity(PlayerNumber owner, RoomRole rrole)
+{
+    struct Dungeon* dungeon = get_dungeon(owner);
+    if (dungeon_invalid(dungeon))
+        return INVALID_ROOM;
+    for (RoomKind rkind = 0; rkind < game.conf.slab_conf.room_types_count; rkind++)
+    {
+        if (!room_role_matches(rkind, rrole))
+            continue;
+        unsigned long k = 0;
+        long i = dungeon->room_list_start[rkind];
+        while (i != 0)
+        {
+            struct Room* room = room_get(i);
+            if (room_is_invalid(room))
+            {
+                ERRORLOG("Jump to invalid room detected");
+                break;
+            }
+            i = room->next_of_owner;
+            if (room->capacity_used_for_storage < max_gold_amount_in_room(room))
+                return room;
+            k++;
+            if (k > ROOMS_COUNT)
+            {
+                ERRORLOG("Infinite loop detected when sweeping rooms list");
+                break;
+            }
+        }
+    }
+    return INVALID_ROOM;
+}
+
 struct Room *find_nth_room_of_owner_with_spare_capacity_starting_with(long room_idx, long n, long spare)
 {
     SYNCDBG(18,"Starting");

@@ -92,6 +92,8 @@ const struct NamedCommand terrain_room_total_capacity_func_type[] = {
     {"gold_slabs_full",         9},
     {"slabs_mul2",             10},
     {"none",                   11},
+    // This edition: removed by the team in #5625 (id 10 is now slabs_mul2); kept for the mods that name it.
+    {"gold_slabs_div2",        12},
     {NULL,                      0},
   };
 
@@ -288,6 +290,7 @@ extern void count_slabs_mul2_wth_effcncy(struct Room *room);
 extern void count_slabs_pow2_wth_effcncy(struct Room *room);
 extern void count_gold_slabs_wth_effcncy(struct Room *room);
 extern void count_gold_slabs_full(struct Room *room);
+extern void count_gold_slabs_div2(struct Room *room);
 
 Room_Update_Func terrain_room_total_capacity_func_list[] = {
   NULL,
@@ -302,6 +305,7 @@ Room_Update_Func terrain_room_total_capacity_func_list[] = {
   count_gold_slabs_full,
   count_slabs_mul2,
   NULL,
+  count_gold_slabs_div2,
   NULL,
 };
 
