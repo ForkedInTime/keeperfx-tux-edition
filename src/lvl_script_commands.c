@@ -3694,16 +3694,19 @@ static void set_creature_property_check(const struct ScriptLine* scline)
         DEALLOCATE_SCRIPT_VALUE
         return;
     }
-    value->shorts[1] = scline->np[0];
+    // This edition: the layout the command had before #5624 (creature, property, on/off in longs[0..2]).
+    // A conditional SET_CREATURE_PROPERTY waiting in a game saved by an older build is read back the
+    // same way, as original level 20's AVATAR NO_IMPRISONMENT is.
+    value->longs[0] = scline->np[0];
     value->longs[1] = prop_id;
-    value->chars[1] = scline->np[2];
+    value->longs[2] = scline->np[2];
     PROCESS_SCRIPT_VALUE(scline->command);
 }
 static void set_creature_property_process(struct ScriptContext* context)
 {
-    ThingModel creature = context->value->shorts[1];
+    ThingModel creature = context->value->longs[0];
     int32_t property = context->value->longs[1];
-    TbBool enable = context->value->chars[1];
+    TbBool enable = (context->value->longs[2] != 0);
 
     set_creature_property(creature, property, enable);
 }
