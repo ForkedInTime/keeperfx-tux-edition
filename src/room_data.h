@@ -167,6 +167,7 @@ TbBool creature_can_get_to_any_of_players_rooms(struct Thing *thing, PlayerNumbe
 struct Room *find_room_of_role_with_spare_room_item_capacity(PlayerNumber plyr_idx, RoomRole rrole);
 struct Room *find_nth_room_of_owner_with_spare_item_capacity_starting_with(long room_idx, long n, long spare);
 struct Room *find_room_of_role_with_spare_capacity(PlayerNumber owner, RoomRole rrole, long spare);
+struct Room *find_room_of_role_with_spare_gold_capacity(PlayerNumber owner, RoomRole rrole);
 struct Room *find_nth_room_of_owner_with_spare_capacity_starting_with(long room_idx, long n, long spare);
 struct Room *find_room_of_role_with_most_spare_capacity(const struct Dungeon *dungeon,RoomRole rrole, int32_t *total_spare_cap);
 struct Room *find_room_nearest_to_position(PlayerNumber plyr_idx, RoomKind rkind, const struct Coord3d *pos, int32_t *room_distance);
@@ -226,6 +227,7 @@ TbBool find_random_valid_position_for_thing_in_room_avoiding_object_excluding_ro
 
 /* MOVE TO room_list.c/h */
 struct Room *find_nearest_room_of_role_for_thing_with_spare_item_capacity(struct Thing *thing, PlayerNumber plyr_idx, RoomRole rrole, unsigned char nav_flags);
+struct Room* find_nearest_room_of_role_for_thing_with_spare_gold_capacity(struct Thing* thing, PlayerNumber plyr_idx, RoomRole rrole, unsigned char nav_flags);
 struct Room *find_random_room_of_role_for_thing(struct Thing *thing, PlayerNumber owner, RoomRole rkind, unsigned char nav_flags);
 struct Room *find_random_room_of_role_for_thing_with_spare_room_item_capacity(struct Thing *thing, PlayerNumber owner, RoomRole rrole, unsigned char nav_flags);
 struct Room *pick_random_room_of_role(PlayerNumber plyr_idx, RoomRole rrole);

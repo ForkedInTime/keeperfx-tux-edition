@@ -179,10 +179,10 @@ static TbError handle_chat_message(NetUserId source, char *read_pos, size_t mess
         return Lb_OK;
     }
     if (expected_frame_type == NETMSG_GAMEPLAY_UNSEQUENCED) {
-        int32_t pos[2] = {-1, -1};
-        if ((size_t)(read_pos - netstate.msg_buffer) + sizeof(pos) <= message_size)
-            memcpy(pos, read_pos, sizeof(pos));
-        queue_gameplay_chat_message(sender, message, pos[0], pos[1]);
+        int32_t cursor_and_turn[3] = {-1, -1, 0};
+        if ((size_t)(read_pos - netstate.msg_buffer) + sizeof(cursor_and_turn) <= message_size)
+            memcpy(cursor_and_turn, read_pos, sizeof(cursor_and_turn));
+        receive_gameplay_chat_message(sender, message, cursor_and_turn[0], cursor_and_turn[1], cursor_and_turn[2]);
     } else {
         process_frontend_chat_message(sender, message);
     }
@@ -214,10 +214,10 @@ void copy_chat_message(char *dst, const char *src)
 
 void send_network_chat_message(NetUserId sender, const char *message)
 {
-    send_network_chat_message_at(sender, message, -1, -1);
+    send_network_chat_message_at(sender, message, -1, -1, 0);
 }
 
-void send_network_chat_message_at(NetUserId sender, const char *message, int32_t cursor_x, int32_t cursor_y)
+void send_network_chat_message_at(NetUserId sender, const char *message, int32_t cursor_x, int32_t cursor_y, GameTurn turn)
 {
     if (network_user_is_spectator(netstate.my_id)) {
         if (netstate.phase == NetPhase_InGame && message[0] != '\0' && !network_spectator_chat_visible) {
@@ -236,12 +236,9 @@ void send_network_chat_message_at(NetUserId sender, const char *message, int32_t
     write_pos += 1;
     strcpy(write_pos, message);
     write_pos += strlen(message) + 1;
-    if (message[0] == cmd_char)
-    {
-        const int32_t pos[2] = {cursor_x, cursor_y};
-        memcpy(write_pos, pos, sizeof(pos));
-        write_pos += sizeof(pos);
-    }
+    const int32_t cursor_and_turn[3] = {cursor_x, cursor_y, (int32_t)turn};
+    memcpy(write_pos, cursor_and_turn, sizeof(cursor_and_turn));
+    write_pos += sizeof(cursor_and_turn);
     send_remote_buffer(write_pos);
 }
 

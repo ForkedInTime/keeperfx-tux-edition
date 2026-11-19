@@ -55,6 +55,7 @@ void count_gold_slabs_full(struct Room *room)
     room->total_capacity = room->slabs_count * get_wealth_size_types_count();
 }
 
+/** This edition: the team removed gold_slabs_div2 in #5625; mods published since December 2024 still name it. */
 void count_gold_slabs_div2(struct Room* room)
 {
     room->total_capacity = room->slabs_count * get_wealth_size_types_count() / 2;
@@ -147,6 +148,20 @@ struct Thing *treasure_room_eats_gold_piles(struct Room *room, MapSlabCoord slb_
         drop_gold_pile(gold_gathered, &pos);
     }
     return hoardtng;
+}
+
+GoldAmount max_gold_amount_in_room(struct Room* room)
+{
+    // This edition: the sum of what each slab's hoard may hold -- the cap count_gold_hoardes_in_room(),
+    // add_gold_to_hoarde() and the gold drop use. Taken as total_capacity * GoldPerHoard / 5 it can be
+    // more than the hoards may hold (a GoldPerHoard not divisible by 5, a TotalCapacity that is not a
+    // multiple of the slab count), and an imp would carry gold from one full hoard to the next for ever.
+    // With the shipped rules both are the same number.
+    if (room->slabs_count <= 0)
+        return 0;
+    GoldAmount wealth_size_holds = game.conf.rules[room->owner].gameplay.gold_per_hoard / get_wealth_size_types_count();
+    GoldAmount max_hoard_size_in_room = wealth_size_holds * room->total_capacity / room->slabs_count;
+    return max_hoard_size_in_room * room->slabs_count;
 }
 
 void count_gold_hoardes_in_room(struct Room *room)

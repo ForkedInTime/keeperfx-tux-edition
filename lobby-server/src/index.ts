@@ -47,7 +47,7 @@ type Phase = (typeof PHASES)[number];
 
 // Limits follow the game's own buffers (src/bflib_netsession.h, src/net_main.h).
 const MAX_GAMES = 100; // the game shows at most 32 (MATCHMAKING_SESSIONS_MAX)
-const MAX_PLAYERS = 4; // SESSION_HUMANS_MAX
+const MAX_PLAYERS = 8; // SESSION_HUMANS_MAX (8 since the team's #5616)
 const PLAYER_NAME_MAX_BYTES = 31; // NETSP_PLAYER_NAME_MAX_LEN, less the terminator
 const GAME_NAME_MAX_CHARS = 64;
 const VERSION_MAX_CHARS = 32;

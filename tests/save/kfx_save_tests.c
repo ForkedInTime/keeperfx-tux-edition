@@ -656,7 +656,7 @@ static void test_migrations(void)
     CHECK(save_migrations_run_table(&ctx, "S", failing, 2, &err) == SVR_Unsupported, "a failing migration wasn't reported");
     mig_log[mig_n] = 0;
     CHECK(strcmp(mig_log, "F") == 0, "ran \"%s\" after a failure, wanted it to stop", mig_log);
-    CHECK(save_migration_count() == 1, "the real registry changed: add a test for the new migration");
+    CHECK(save_migration_count() == 2, "the real registry changed: add a test for the new migration");
 }
 /******************************************************************************/
 /* Format 1.10 moved the hand from the keeper (Dungeon) to each player (UserState); Dungeon's list became
@@ -739,6 +739,75 @@ static void test_migration_hand_to_user(void)
         CHECK(run_game_migrations(g, 10), "migrations failed on a 1.10 file");
         CHECK(g->dungeon[0].num_things_in_hand == 3, "a 1.10 file's drop queue was moved");
         CHECK(g->user_states[0].num_things_in_hand == 0, "a 1.10 file's user hand was filled");
+        free(g);
+    }
+}
+
+/* Format 1.12 (the team's #5616) raised MAX_NET_USERS from 4 to 8. An older file saved 4 UserStates and the
+   loader leaves the others zeroed -- player 0, a present user of the red keeper. Every user the file did not
+   save becomes nobody, and the hand migration only looks at the users the file saved. */
+static int run_game_migrations_from_file(struct Game *g, uint16_t file_minor, uint32_t file_users)
+{
+    struct SaveFileField field;
+    struct SaveFileStruct game_struct;
+    struct SaveFileSchema schema;
+    struct SaveDecoder decoder;
+    memset(&field, 0, sizeof(field));
+    field.name = (char *)"user_states";
+    field.stored_type = SV_STRUCT;
+    field.dim_count = 1;
+    field.dims[0] = file_users;
+    field.sub_type = (char *)"UserState";
+    game_struct.name = (char *)"Game";
+    game_struct.field_count = 1;
+    game_struct.fields = &field;
+    schema.struct_count = 1;
+    schema.structs = &game_struct;
+    memset(&decoder, 0, sizeof(decoder));
+    decoder.schema = &schema;
+    struct SaveLoadCtx ctx = { g, &decoder, file_minor };
+    struct SaveError err;
+    return save_migrations_run(&ctx, "Game", &err) == SVR_Ok;
+}
+
+static void test_migration_users_the_file_lacks(void)
+{
+    section("migration: users an older file did not save are nobody");
+    {   /* four_user_file_clears_the_rest */
+        struct Game *g = calloc(1, sizeof(struct Game));   /* what the loader leaves: all zero, then the file */
+        g->user_states[0].player_id = 0;
+        for (int user = 1; user < 4; user++)
+            g->user_states[user].player_id = -1;
+        CHECK(run_game_migrations_from_file(g, 11, 4), "migration failed");
+        CHECK(g->user_states[0].player_id == 0, "user 0 lost its keeper (%d)", g->user_states[0].player_id);
+        for (int user = 4; user < MAX_NET_USERS; user++)
+            CHECK(g->user_states[user].player_id == PLAYER_NONE && g->user_states[user].reconnect_player_id == PLAYER_NONE,
+                "user %d the file lacks plays %d (reconnect %d), wanted nobody", user,
+                g->user_states[user].player_id, g->user_states[user].reconnect_player_id);
+        free(g);
+    }
+    {   /* hand_not_given_to_a_user_the_file_lacks */
+        struct Game *g = calloc(1, sizeof(struct Game));
+        static const ThingIndex held[] = { 31, 32 };
+        g->user_states[0].player_id = 1;                  /* the human plays keeper 1 */
+        for (int user = 1; user < 4; user++)
+            g->user_states[user].player_id = -1;
+        hold(&g->dungeon[0], held, 2);                    /* computer keeper 0 holds two things */
+        CHECK(run_game_migrations_from_file(g, 9, 4), "migration failed");
+        CHECK(g->dungeon[0].num_things_in_hand == 2, "computer keeper 0 lost its list to a user the file lacks");
+        for (int user = 4; user < MAX_NET_USERS; user++)
+            CHECK(g->user_states[user].num_things_in_hand == 0, "user %d the file lacks got %d things", user,
+                g->user_states[user].num_things_in_hand);
+        free(g);
+    }
+    {   /* eight_user_file_untouched */
+        struct Game *g = hand_game();
+        for (int user = 0; user < MAX_NET_USERS; user++)
+            g->user_states[user].player_id = (PlayerNumber)(user % 3);
+        CHECK(run_game_migrations_from_file(g, 12, MAX_NET_USERS), "migration failed");
+        for (int user = 0; user < MAX_NET_USERS; user++)
+            CHECK(g->user_states[user].player_id == user % 3, "user %d of a full file changed to %d", user,
+                g->user_states[user].player_id);
         free(g);
     }
 }
@@ -1823,6 +1892,7 @@ int main(int argc, char **argv)
     test_modes();
     test_migrations();
     test_migration_hand_to_user();
+    test_migration_users_the_file_lacks();
     test_container();
     test_inspect();
     test_recfile();

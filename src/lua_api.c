@@ -1956,16 +1956,7 @@ static int lua_Set_digger(lua_State *L)
 static int lua_Set_texture(lua_State *L)
 {
     struct PlayerRange player_range = luaL_checkPlayerRange(L, 1);
-    long texture_id = luaL_checkNamedCommand(L,2,texture_pack_desc);
-
-    if (texture_id == -1)
-    {
-        texture_id = 0;
-    }
-    else if (texture_id < 0)
-    {
-        return luaL_argerror(L, 2, "invalid texture id");
-    }
+    long texture_id = luaL_checkTexturePack(L, 2);
 
     for (PlayerNumber i = player_range.start_idx; i < player_range.end_idx; i++)
     {
@@ -2112,7 +2103,7 @@ static int lua_Change_slab_texture(lua_State *L)
 {
     MapSlabCoord slb_x = luaL_checkslb_x(L, 1);
     MapSlabCoord slb_y = luaL_checkslb_y(L, 2);
-    long texture_id = luaL_checkNamedCommand(L, 3,texture_pack_desc);
+    long texture_id = luaL_checkTexturePack(L, 3);
     int fill_type = luaL_optNamedCommand(L, 4,fill_desc);
 
     if (fill_type > 0)
@@ -2121,7 +2112,9 @@ static int lua_Change_slab_texture(lua_State *L)
         iter_param.primary_number = texture_id;
         iter_param.secondary_number = fill_type;
         iter_param.tertiary_number = get_slabmap_block(slb_x, slb_y)->kind;
-        slabs_fill_iterate_from_slab(slb_x, slb_y, slabs_change_type, &iter_param);
+        // This edition: the texture, as CHANGE_SLAB_TEXTURE fills it -- slabs_change_type made each slab the
+        // slab kind numbered like the texture (1 = rock, 2 = gold, ...).
+        slabs_fill_iterate_from_slab(slb_x, slb_y, slabs_change_texture, &iter_param);
     }
     else
     {

@@ -1428,6 +1428,9 @@ TbBool decrease_power_level_of_player(PowerKind pwkind, PlayerNumber plyr_idx)
 void power_lost_side_effects(PowerKind pwkind, PlayerNumber plyr_idx)
 {
     struct Thing* thing;
+    // This edition: a level's own Must Obey power (#5613) is not PwrK_OBEY; losing the one that runs ends it too.
+    if ((pwkind != PwrK_OBEY) && player_uses_power_obey(plyr_idx) && (get_players_num_dungeon(plyr_idx)->must_obey_idx == pwkind))
+        turn_off_power_obey(plyr_idx);
     switch (pwkind)
     {
     case PwrK_OBEY:

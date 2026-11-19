@@ -292,6 +292,31 @@ await test("a full or locked game is refused", async () => {
 	browser.close();
 });
 
+await test("an eight-player game keeps its seats and takes a fifth player", async () => {
+	const browser = await new Client("browser").open();
+	const host = await new Client("host").open();
+	host.send(create(metadata({ maxPlayers: 8, players: ["Host", "A", "B", "C"] })));
+	const { id } = await host.next("created");
+	const listed = (await browser.latestList()).lobbies.find((game) => game.id === id);
+	assert.equal(listed.maxPlayers, 8);
+	assert.deepEqual(listed.players, ["Host", "A", "B", "C"]);
+	browser.send(punch(id));
+	await browser.next("punch");
+	await host.next("punch");
+	host.send(update(id, metadata({ maxPlayers: 8, players: ["Host", "A", "B", "C", "D", "E", "F", "G"] })));
+	await sleep(200);
+	assert.equal((await browser.latestList()).lobbies.find((game) => game.id === id).players.length, 8);
+	host.send(update(id, metadata({ maxPlayers: 9, players: ["Host", "A", "B", "C", "D", "E", "F", "G", "H"] })));
+	await sleep(200);
+	const kept = (await browser.latestList()).lobbies.find((game) => game.id === id);
+	assert.equal(kept.maxPlayers, 8, "a ninth seat was accepted");
+	assert.equal(kept.players.length, 8, "a ninth name was accepted");
+	host.send(`{"action":"cancel","id":"${id}"}`);
+	await host.next("deleted");
+	host.close();
+	browser.close();
+});
+
 await test("only the host can change or close its game", async () => {
 	const browser = await new Client("browser").open();
 	const host = await new Client("host").open();

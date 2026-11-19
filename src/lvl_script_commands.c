@@ -438,26 +438,6 @@ const struct NamedCommand orientation_desc[] = {
   {NULL, 0}
 };
 
-const struct NamedCommand texture_pack_desc[] = {
-  {"NONE",         0},
-  {"STANDARD",     1},
-  {"ANCIENT",      2},
-  {"WINTER",       3},
-  {"SNAKE_KEY",    4},
-  {"STONE_FACE",   5},
-  {"VOLUPTUOUS",   6},
-  {"BIG_BREASTS",  6},
-  {"ROUGH_ANCIENT",7},
-  {"SKULL_RELIEF", 8},
-  {"DESERT_TOMB",  9},
-  {"GYPSUM",       10},
-  {"LILAC_STONE",  11},
-  {"SWAMP_SERPENT",12},
-  {"LAVA_CAVERN",  13},
-  {"LATERITE_CAVERN",14},
-  {NULL,           0},
-};
-
 ThingModel parse_creature_name(const char *creature_name)
 {
     ThingModel ret = get_rid(creature_desc, creature_name);
@@ -2484,9 +2464,28 @@ static void set_creature_configuration_check(const struct ScriptLine* scline)
     long config_value_primary = 0, config_value_secondary = 0, config_value_tertiary = 0, config_value_quaternary = 0, config_value_quinary = 0, config_value_senary = 0;
     if (block == CrtConf_ATTRIBUTES)
     {
+        //  HEROVSKEEPERCOST || CREATURELOYALTY  || LOYALTYLEVEL
+        if ((creatvar == 22) || (creatvar == 24) || (creatvar == 25))
+        {
+            SCRPTERRLOG("Attribute %s(%d) not supported.", creatmodel_attributes_commands[creatvar - 1].name, creatvar);
+            DEALLOCATE_SCRIPT_VALUE
+            return;
+        }
         if (creatvar == 20) // ATTACKPREFERENCE
         {
             config_value_primary = get_id(attackpref_desc, scline->tp[2]);
+        }
+        else if (creatvar == 28) // PROPERTIES
+        {
+            config_value_primary = get_rid(creatmodel_properties_commands, scline->tp[2]);
+            if (scline->tp[3][0] != '\0')
+            {
+                config_value_secondary = atoi(scline->tp[3]);
+            }
+            else
+            {
+                config_value_secondary = 1;
+            }
         }
         else if (creatvar == 34) // LAIROBJECT
         {
@@ -3107,15 +3106,8 @@ static void set_creature_configuration_process(struct ScriptContext* context)
         case 21: // PAY
             crconf->pay = value;
             break;
-        case 22: // HEROVSKEEPERCOST
-            break;
         case 23: // SLAPSTOKILL
             crconf->slaps_to_kill = value;
-            break;
-        case 24: // CREATURELOYALTY
-        case 25: // LOYALTYLEVEL
-        case 28: // PROPERTIES
-            CONFWRNLOG("Attribute (%d) not supported", creature_variable);
             break;
         case 26: // DAMAGETOBOULDER
             crconf->damage_to_boulder = value;
@@ -3126,6 +3118,9 @@ static void set_creature_configuration_process(struct ScriptContext* context)
             {
                 crconf->thing_size_z = config_value_secondary;
             }
+            break;
+        case 28: // PROPERTIES
+            set_creature_property(creatid, value, (config_value_secondary != 0));
             break;
         case 29: // NAMETEXTID
             crconf->namestr_idx = value;
@@ -3686,6 +3681,34 @@ static void set_creature_configuration_process(struct ScriptContext* context)
         ERRORLOG("Trying to configure unsupported creature block (%d)",block);
     }
     check_and_auto_fix_stats();
+}
+
+static void set_creature_property_check(const struct ScriptLine* scline)
+{
+    ALLOCATE_SCRIPT_VALUE(scline->command, 0);
+
+    int32_t prop_id = get_rid(creatmodel_properties_commands, scline->tp[1]);
+    if (prop_id == -1)
+    {
+        SCRPTERRLOG("Unknown creature property kind, \"%s\"", scline->tp[1]);
+        DEALLOCATE_SCRIPT_VALUE
+        return;
+    }
+    // This edition: the layout the command had before #5624 (creature, property, on/off in longs[0..2]).
+    // A conditional SET_CREATURE_PROPERTY waiting in a game saved by an older build is read back the
+    // same way, as original level 20's AVATAR NO_IMPRISONMENT is.
+    value->longs[0] = scline->np[0];
+    value->longs[1] = prop_id;
+    value->longs[2] = scline->np[2];
+    PROCESS_SCRIPT_VALUE(scline->command);
+}
+static void set_creature_property_process(struct ScriptContext* context)
+{
+    ThingModel creature = context->value->longs[0];
+    int32_t property = context->value->longs[1];
+    TbBool enable = (context->value->longs[2] != 0);
+
+    set_creature_property(creature, property, enable);
 }
 
 static void set_object_configuration_process(struct ScriptContext *context)
@@ -5026,6 +5049,9 @@ static void set_texture_check(const struct ScriptLine *scline)
         else
         {
             SCRPTERRLOG("Invalid texture pack: '%s'", scline->tp[1]);
+            // This edition: give the value back, as every other refusal does; one left allocated
+            // in a condition would run later with no texture set in it.
+            DEALLOCATE_SCRIPT_VALUE
             return;
         }
     }
@@ -7152,7 +7178,7 @@ const struct CommandDesc command_desc[] = {
   {"SET_CREATURE_FEAR_WOUNDED",         "CN      ", Cmd_SET_CREATURE_FEAR_WOUNDED, NULL, NULL},
   {"SET_CREATURE_FEAR_STRONGER",        "CN      ", Cmd_SET_CREATURE_FEAR_STRONGER, NULL, NULL},
   {"SET_CREATURE_FEARSOME_FACTOR",      "CN      ", Cmd_SET_CREATURE_FEARSOME_FACTOR, NULL, NULL},
-  {"SET_CREATURE_PROPERTY",             "CAB     ", Cmd_SET_CREATURE_PROPERTY, NULL, NULL},
+  {"SET_CREATURE_PROPERTY",             "CAB     ", Cmd_SET_CREATURE_PROPERTY, &set_creature_property_check, &set_creature_property_process},
   {"IF_AVAILABLE",                      "PAOAa   ", Cmd_IF_AVAILABLE, &if_available_check, NULL},
   {"IF_CONTROLS",                       "PAOAa   ", Cmd_IF_CONTROLS,  &if_controls_check, NULL},
   {"SET_COMPUTER_GLOBALS",              "PNNNNNNn", Cmd_SET_COMPUTER_GLOBALS, &set_computer_globals_check, &set_computer_globals_process},

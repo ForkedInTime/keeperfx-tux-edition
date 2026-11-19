@@ -127,8 +127,10 @@ SAVE_STRUCT(PacketSaveHead, struct PacketSaveHead,
     SAVE_FIELD(struct PacketSaveHead, timestamp_turn, SV_U32),
     SAVE_ARRAY(struct PacketSaveHead, map_checksums, SV_U32),
     SAVE_ARRAY2(struct PacketSaveHead, user_prefs, SV_U32),
-    SAVE_ARRAY(struct PacketSaveHead, user_players, SV_I8),
+    /* This edition: a replay from before #5616 holds 4 users; the other 4 are nobody (-1), not player 0,
+     * or packet_saved_users() expects their packets and the replay is read out of step. */
+    SAVE_ARRAY_EX(struct PacketSaveHead, user_players, SV_I8, .default_value = -1),
     SAVE_FIELD(struct PacketSaveHead, recording_user, SV_I8),
-    SAVE_FIELD(struct PacketSaveHead, frontend_alliances, SV_I8),
+    SAVE_FIELD(struct PacketSaveHead, frontend_alliances, SV_I32),
     SAVE_ARRAY2(struct PacketSaveHead, user_names, SV_STR),  /* plain-char */
 );

@@ -1113,13 +1113,17 @@ static TbResult magic_use_power_obey(PowerKind power_kind, PlayerNumber plyr_idx
     struct Dungeon *dungeon;
     dungeon = get_players_num_dungeon(plyr_idx);
     // Toggle the power
-    if (dungeon->must_obey_turn != 0) {
+    if (dungeon->must_obey_turn != 0) 
+    {
         dungeon->must_obey_turn = 0;
-    } else {
+        dungeon->must_obey_idx = PwrK_None;
+    } else 
+    {
         dungeon->must_obey_turn = get_gameturn();
+        dungeon->must_obey_idx = power_kind;
         if (is_local_action(plyr_idx, user))
         {
-            struct PowerConfigStats *powerst = get_power_model_stats(PwrK_OBEY);
+            struct PowerConfigStats *powerst = get_power_model_stats(power_kind);
             play_non_3d_sample(powerst->select_sound_idx);
         }
     }
@@ -1132,6 +1136,7 @@ void turn_off_power_obey(PlayerNumber plyr_idx)
     struct Dungeon *dungeon;
     dungeon = get_players_num_dungeon(plyr_idx);
     dungeon->must_obey_turn = 0;
+    dungeon->must_obey_idx = PwrK_None;
     update_speed_of_player_creatures_of_model(plyr_idx, 0);
 }
 
@@ -2024,16 +2029,22 @@ void process_magic_power_call_to_arms(PlayerNumber plyr_idx)
 
 void process_magic_power_must_obey(PlayerNumber plyr_idx)
 {
-    struct Dungeon *dungeon;
-    dungeon = get_players_num_dungeon(plyr_idx);
-    long delta;
-    delta = get_gameturn() - dungeon->must_obey_turn;
-    const struct PowerConfigStats *powerst;
-    powerst = get_power_model_stats(PwrK_OBEY);
-    if ((delta % powerst->duration) == 0)
+    struct Dungeon *dungeon = get_players_num_dungeon(plyr_idx);
+    long delta = get_gameturn() - dungeon->must_obey_turn;
+    // This edition: the power that runs must be a real one with a Duration. A saved game whose power
+    // is not in this game's magic.cfg (a mod's power, the mod not loaded) gets the standard Must Obey,
+    // and a Duration of 0 charges every turn instead of dividing by zero.
+    const struct PowerConfigStats *powerst = get_power_model_stats(dungeon->must_obey_idx);
+    if (power_model_stats_invalid(powerst))
     {
-        if (!pay_for_spell(plyr_idx, PwrK_OBEY, 0)) {
-            magic_use_power_obey(PwrK_OBEY,plyr_idx,NO_USER,INVALID_THING,0,0,0, PwMod_Default);
+        dungeon->must_obey_idx = PwrK_OBEY;
+        powerst = get_power_model_stats(PwrK_OBEY);
+    }
+    const long duration = (powerst->duration > 0) ? powerst->duration : 1;
+    if ((delta % duration) == 0)
+    {
+        if (!pay_for_spell(plyr_idx, dungeon->must_obey_idx, 0)) {
+            magic_use_power_obey(dungeon->must_obey_idx,plyr_idx,NO_USER,INVALID_THING,0,0,0, PwMod_Default);
         }
     }
 }

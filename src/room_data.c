@@ -445,6 +445,11 @@ void count_slabs_all_only(struct Room *room)
     room->total_capacity = room->slabs_count;
 }
 
+void count_slabs_mul2(struct Room* room)
+{
+    room->total_capacity = room->slabs_count*2;
+}
+
 void count_slabs_all_wth_effcncy(struct Room *room)
 {
     unsigned long count = room->slabs_count * ((long)room->efficiency);
@@ -1871,6 +1876,44 @@ struct Room *find_room_of_role_with_spare_capacity(PlayerNumber owner, RoomRole 
             room = find_nth_room_of_owner_with_spare_capacity_starting_with(dungeon->room_list_start[rkind], 0, spare);
             if(room != INVALID_ROOM)
                 return room;
+        }
+    }
+    return INVALID_ROOM;
+}
+
+/**
+ * This edition: a gold room with gold to spare by #5625's test -- less gold than its hoards may
+ * hold -- rather than hoard units to spare, which rounds every hoard up and calls a room full
+ * while it can still take up to a fifth more gold. Any room the hoard-unit test finds, this finds.
+ */
+struct Room *find_room_of_role_with_spare_gold_capacity(PlayerNumber owner, RoomRole rrole)
+{
+    struct Dungeon* dungeon = get_dungeon(owner);
+    if (dungeon_invalid(dungeon))
+        return INVALID_ROOM;
+    for (RoomKind rkind = 0; rkind < game.conf.slab_conf.room_types_count; rkind++)
+    {
+        if (!room_role_matches(rkind, rrole))
+            continue;
+        unsigned long k = 0;
+        long i = dungeon->room_list_start[rkind];
+        while (i != 0)
+        {
+            struct Room* room = room_get(i);
+            if (room_is_invalid(room))
+            {
+                ERRORLOG("Jump to invalid room detected");
+                break;
+            }
+            i = room->next_of_owner;
+            if (room->capacity_used_for_storage < max_gold_amount_in_room(room))
+                return room;
+            k++;
+            if (k > ROOMS_COUNT)
+            {
+                ERRORLOG("Infinite loop detected when sweeping rooms list");
+                break;
+            }
         }
     }
     return INVALID_ROOM;
@@ -3436,6 +3479,9 @@ struct Room *place_room(PlayerNumber owner, RoomKind rkind, MapSubtlCoord stl_x,
     return room;
 }
 
+/**
+ * Find nearest room that has storage to spare. Cannot be used for gold because gold rooms store hoard amount, not gold amount.
+ */
 struct Room *find_nearest_room_of_role_for_thing_with_spare_item_capacity(struct Thing *thing, PlayerNumber plyr_idx, RoomRole rrole, unsigned char nav_flags)
 {
     long retdist = INT32_MAX;
@@ -3460,6 +3506,57 @@ struct Room *find_nearest_room_of_role_for_thing_with_spare_item_capacity(struct
                 // Per-room code
                 long dist = grid_distance(thing->mappos.x.stl.num, thing->mappos.y.stl.num, room->central_stl_x, room->central_stl_y);
                 if ((dist < retdist) && (room->total_capacity > room->capacity_used_for_storage))
+                {
+                    struct Coord3d pos;
+                    if (find_first_valid_position_for_thing_anywhere_in_room(thing, room, &pos))
+                    {
+                        if (!thing_is_creature(thing) || creature_can_navigate_to(thing, &pos, nav_flags))
+                        {
+                            retdist = dist;
+                            retroom = room;
+                        }
+                    }
+                }
+                // Per-room code ends
+                k++;
+                if (k > ROOMS_COUNT)
+                {
+                    ERRORLOG("Infinite loop detected when sweeping rooms list");
+                    break;
+                }
+            }
+        }
+    }
+    return retroom;
+}
+
+/**
+ * Function is similar to checking for spare item capacity, but with special condition to calculate max gold.
+ */
+struct Room* find_nearest_room_of_role_for_thing_with_spare_gold_capacity(struct Thing* thing, PlayerNumber plyr_idx, RoomRole rrole, unsigned char nav_flags)
+{
+    int32_t retdist = INT32_MAX;
+    struct Room* retroom = INVALID_ROOM;
+
+    struct Dungeon* dungeon = get_dungeon(plyr_idx);
+    for (RoomKind rkind = 0; rkind < game.conf.slab_conf.room_types_count; rkind++)
+    {
+        if (room_role_matches(rkind, rrole))
+        {
+            long i = dungeon->room_list_start[rkind];
+            unsigned long k = 0;
+            while (i != 0)
+            {
+                struct Room* room = room_get(i);
+                if (room_is_invalid(room))
+                {
+                    ERRORLOG("Jump to invalid room detected");
+                    break;
+                }
+                i = room->next_of_owner;
+                // Per-room code
+                long dist = grid_distance(thing->mappos.x.stl.num, thing->mappos.y.stl.num, room->central_stl_x, room->central_stl_y);
+                if ((dist < retdist) && (max_gold_amount_in_room(room) > room->capacity_used_for_storage))
                 {
                     struct Coord3d pos;
                     if (find_first_valid_position_for_thing_anywhere_in_room(thing, room, &pos))
