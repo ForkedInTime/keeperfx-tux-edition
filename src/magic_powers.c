@@ -2031,8 +2031,17 @@ void process_magic_power_must_obey(PlayerNumber plyr_idx)
 {
     struct Dungeon *dungeon = get_players_num_dungeon(plyr_idx);
     long delta = get_gameturn() - dungeon->must_obey_turn;
+    // This edition: the power that runs must be a real one with a Duration. A saved game whose power
+    // is not in this game's magic.cfg (a mod's power, the mod not loaded) gets the standard Must Obey,
+    // and a Duration of 0 charges every turn instead of dividing by zero.
     const struct PowerConfigStats *powerst = get_power_model_stats(dungeon->must_obey_idx);
-    if ((delta % powerst->duration) == 0)
+    if (power_model_stats_invalid(powerst))
+    {
+        dungeon->must_obey_idx = PwrK_OBEY;
+        powerst = get_power_model_stats(PwrK_OBEY);
+    }
+    const long duration = (powerst->duration > 0) ? powerst->duration : 1;
+    if ((delta % duration) == 0)
     {
         if (!pay_for_spell(plyr_idx, dungeon->must_obey_idx, 0)) {
             magic_use_power_obey(dungeon->must_obey_idx,plyr_idx,NO_USER,INVALID_THING,0,0,0, PwMod_Default);
