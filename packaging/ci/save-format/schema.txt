@@ -1,4 +1,4 @@
-format 1.11
+format 1.12
 ActionPoint.activated u16 - save,sync
 ActionPoint.exists bool8 - save,sync
 ActionPoint.mappos struct:Coord2d - save,sync
@@ -502,6 +502,7 @@ Dungeon.max_creatures_attracted i32 - save,sync
 Dungeon.max_gameplay_score u32 - save,sync
 Dungeon.mnfct_info struct:TrapInfo - save,sync
 Dungeon.modifier struct:Modifiers - save,sync
+Dungeon.must_obey_idx u16 - save,sync
 Dungeon.must_obey_turn u32 - save,sync
 Dungeon.num_active_creatrs u16 - save,sync
 Dungeon.num_active_diggers u16 - save,sync
@@ -701,7 +702,7 @@ Game.unrevealed_column_idx i16 - save,sync
 Game.unsync_random_seed u32 - save
 Game.unsynced_free_things u16 [4096] save,sync
 Game.unsynced_free_things_count u16 - save,sync
-Game.user_states struct:UserState [4] save,sync
+Game.user_states struct:UserState [8] save,sync
 Game.view_mode_flags u8 - save,sync
 GoldLookup.flags u8 - save,sync
 GoldLookup.num_gem_slabs u32 - save,sync
@@ -903,7 +904,7 @@ Packet.pos_y i32 - save,sync
 Packet.turn u32 - save,sync
 PacketSaveHead.action_seed u32 - save,sync
 PacketSaveHead.flags u8 - save,sync
-PacketSaveHead.frontend_alliances i8 - save,sync
+PacketSaveHead.frontend_alliances i32 - save,sync
 PacketSaveHead.game_ver_build u16 - save,sync
 PacketSaveHead.game_ver_major u16 - save,sync
 PacketSaveHead.game_ver_minor u16 - save,sync
@@ -917,9 +918,9 @@ PacketSaveHead.recording_user i8 - save,sync
 PacketSaveHead.timestamp i64 - save,sync
 PacketSaveHead.timestamp_turn u32 - save,sync
 PacketSaveHead.timestamp_tz i32 - save,sync
-PacketSaveHead.user_names str [4][20] save,sync
-PacketSaveHead.user_players i8 [4] save,sync
-PacketSaveHead.user_prefs u32 [4][23] save,sync
+PacketSaveHead.user_names str [8][20] save,sync
+PacketSaveHead.user_players i8 [8] save,sync
+PacketSaveHead.user_prefs u32 [8][23] save,sync
 Party.members struct:PartyMember [30] save,sync
 Party.members_num u32 - save,sync
 Party.prtname str [100] save,sync
