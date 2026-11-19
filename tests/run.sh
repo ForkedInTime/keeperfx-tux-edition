@@ -103,6 +103,21 @@ g++ -std=c++17 -Wall -Wextra $EXTRA_FLAGS -I"$ROOT_DIR/src" $(pkg-config --cflag
 	$(pkg-config --libs sdl3 luajit)
 "$ROOT_DIR/bin/test_lua_readonly" "$ROOT_DIR"
 
+# lua_close() after the sandbox took the ffi module away (issue #91). On LuaJIT before 2024-04-18,
+# Ubuntu 24.04's (this CI's) and the AppImage's among them, the module was all that kept the FFI's
+# finalizer table alive, and lua_close() walks it. Freed memory is poisoned here, so a use-after-free
+# crashes every time. KFX_TEST_OLD_LUAJIT_DIR=<folder with an older libluajit-5.1.so.2> runs it
+# against that library as well.
+cc -Wall -Wextra -Wno-unused-parameter $EXTRA_FLAGS -I"$ROOT_DIR/src" $(pkg-config --cflags sdl3 luajit) \
+	-c "$ROOT_DIR/src/lua_sandbox.c" -o "$ROOT_DIR/bin/lua_sandbox_for_tests.o"
+cc -Wall -Wextra -Wno-unused-parameter $EXTRA_FLAGS -I"$ROOT_DIR/src" $(pkg-config --cflags sdl3 luajit) \
+	-o "$ROOT_DIR/bin/test_lua_close" "$ROOT_DIR/tests/test_lua_close.c" \
+	"$ROOT_DIR/bin/lua_sandbox_for_tests.o" $(pkg-config --libs luajit)
+"$ROOT_DIR/bin/test_lua_close"
+if [ -n "${KFX_TEST_OLD_LUAJIT_DIR:-}" ]; then
+	LD_LIBRARY_PATH="$KFX_TEST_OLD_LUAJIT_DIR" "$ROOT_DIR/bin/test_lua_close"
+fi
+
 # The test above checks the sandbox's own loaders; this checks nothing in the
 # engine goes around them. A direct luaL_loadfile and the like accepts bytecode,
 # so one such call added by an upstream merge (as #5582 does) fails here.
