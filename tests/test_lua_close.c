@@ -139,11 +139,35 @@ static int case_still_no_ffi(void)
     return ok ? 0 : 3;
 }
 
+/* The FFI's metamethod table (miscmap): any cdata metamethod a script triggers reads it -- an unknown
+ * field, arithmetic with a table, a call, a concatenation, a length, a comparison. Each must be a clean
+ * Lua error, then the state closes. Before it was kept alive the drop freed it, on every LuaJIT. */
+static int case_cdata_metamethods(void)
+{
+    lua_State *L = sandboxed_state();
+    if (L == NULL)
+        return 2;
+    int ok = chunk_true(L, "local x = 1LL "
+                           "for _, f in ipairs({function() return x.foo end, function() return x + {} end, "
+                           "function() return x() end, function() return x .. 1 end, function() return #x end, "
+                           "function() return x < {} end, function() return pairs(x) end}) do "
+                           "if pcall(f) then return false end end "
+                           "collectgarbage() return true");
+    lua_gc(L, LUA_GCCOLLECT, 0);
+    lua_close(L);
+    return ok ? 0 : 3;
+}
+
 /* Runs a case in a child, so a crash is reported instead of ending the test. */
 static void run_case(const char *what, int (*body)(void))
 {
     fflush(stdout);
     pid_t pid = fork();
+    if (pid < 0)
+    {
+        expect(0, "could not start a test process");
+        return;
+    }
     if (pid == 0)
     {
         int result = body();
@@ -168,6 +192,7 @@ int main(void)
     run_case("a level's state closes after the sandbox took the ffi module away", case_one_level);
     run_case("ten levels in a row close", case_ten_levels);
     run_case("scripts still can't reach the ffi module, and 64-bit literals still work", case_still_no_ffi);
+    run_case("cdata metamethods a script triggers are clean errors, and the state closes", case_cdata_metamethods);
     if (g_failures > 0)
     {
         printf("%d failure(s)\n", g_failures);
