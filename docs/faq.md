@@ -14,10 +14,10 @@ opens in 1.4.0.6072 and later, but not in 1.4.0.6062 or the 1.4.0.6013 alpha. Sa
 are not affected.
 
 And one more, from the 1.4.0.6259 alpha (19 November 2026) on: **a game saved there doesn't open in
-1.4.0.6199 or earlier**, stable 1.4.0.6103 included. The KeeperFX team made room for eight players, a save
+1.4.0.6199 or earlier, nor in stable 1.4.0.6109**. The KeeperFX team made room for eight players, a save
 now holds eight player slots, and the older builds refuse a save with more slots than they have. The
-other way round is fine: games saved by 1.4.0.6103 and 1.4.0.6199 load in the new alpha. So if you go back
-from that alpha to stable 1.4.0.6103, your stable saves are where you left them, and the games you saved
+other way round is fine: games saved by 1.4.0.6109 and 1.4.0.6199 load in the new alpha. So if you go back
+from that alpha to stable 1.4.0.6109, your stable saves are where you left them, and the games you saved
 on the alpha wait for the next stable, which reads them.
 
 In practice: a campaign tells you it needs the latest alpha, you switch to alpha, play it, then

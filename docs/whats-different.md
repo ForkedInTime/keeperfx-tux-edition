@@ -33,14 +33,14 @@ Wine, and the Linux-specific fixes, hardening and performance work below.
 > | 🧮 | **64-bit & Windows-assumption fixes** — the game was written for 32-bit Windows: level-script argument slots, the software rasteriser's carries (creature shadows), signed game-turn arithmetic, movie-recorder and high-score file layouts, campaign progress and save titles written by earlier Linux builds, the light table in saved games, 64-bit config flags (the hand's), a network timeout; plus mod files in any letter case, `\` paths, Korean code page 949, an API-server SIGPIPE | ~20 fixes |
 > | 🛡️ | **Correctness & security hardening** — a multi-agent Linux audit (out-of-bounds writes from crafted maps/mods, union byte-aliasing, format-string bugs) plus a standing sanitizer pass (AddressSanitizer and UndefinedBehaviorSanitizer) that found six memory faults upstream has shipped since as far back as 2008, static analysis and valgrind runs (a heap overflow in map-script fills, mods that froze the game, a leak on every level start), map scripts that read files but cannot change them, run bytecode or call native code, and chat and replays that can no longer act on your machine | ~60 fixes |
 > | 🎮 | **Gameplay bugs found in players' games** — workers quitting a room they cross or step off, endless scavenger re-enrolment, imps and the computer repeating trips that cannot succeed, trap-crate and hatchery counts, rebirth, doors, explosions, abyss kills, the Call to Arms charge bar, script commands that missed the creatures already on the map, replays that fell a turn behind after a save, creatures choosing steps from leftover memory, saves on levels that bring their own config files, and treasure rooms with modded gold settings | ~30 fixes |
-> | 💥 | **Crash fixes** — ultrawide creature-possession, UTF-8 fonts, campaign scripts, clean exit, case-sensitive audio, the startup error dialog without libXrandr, Lua errors that closed the game, Must Obey in a game saved by an earlier version, the creature-list corruption **root-fixed** | ~10 fixes |
+> | 💥 | **Crash fixes** — ultrawide creature-possession, UTF-8 fonts, campaign scripts, clean exit, case-sensitive audio, the startup error dialog without libXrandr, Lua errors that closed the game, Lua's shutdown at a level change, Must Obey in a game saved by an earlier version, the creature-list corruption **root-fixed** | ~10 fixes |
 > | ⚡ | **Performance** — frame pacing matched to your monitor, cached parchment map view, per-turn CPU busy-spin, sprite/text blit, GUI hot paths, cached instant-load Workshop | 8 wins |
 > | 🎨 | **Graphics & audio** — upstream's OpenGL renderer built into the Linux binary and made the default (software when OpenGL cannot start), full sharpness on a scaled desktop, front-end movies in any codec and in full colour on either renderer, your own music in any filenames and any of OGG/FLAC/WAV/MP3, a real window icon and desktop identity on X11 *and* Wayland, artwork (and the game's text) regenerated from upstream's sources on every build | 6 items |
 > | 🌐 | **Multiplayer** — this edition's own lobby server (nothing goes to the team's servers, checked on every build), the Classic, Modern and Original mappacks loading in every install method, two ways a game fell out of step closed with the team's fixes ahead of a sync, the team's same-files check before a match without it telling the host about your other files, a hosted game that survives losing the lobby, and eight players | 7 items |
 > | 🧰 | **Launcher & tooling** — in-launcher Workshop browser + Installed manager, Mod Manager, Play ▾ menu, built-in updater with **separate stable and alpha channels**, side-by-side log viewer, the last five game logs kept, your own notes in `keeperfx.cfg` kept, a Replays window that finds the replays, crash reports that stay on your computer, saves backed up before an update, music download + recovery, single-instance lock, weekly sync bot, a weekly Arch library watch, a daily check for the team's later fixes to anything taken early | 17+ items |
 >
 > <sub>Count it yourself: `git log --oneline --no-merges --invert-grep --grep='^Linux-Snapshot-Of:' upstream/master..HEAD`
-> — 519 commits on top of the team's master, snapshot commits excluded; 23 of them are the team's own fixes, taken ahead of a
+> — 523 commits on top of the team's master, snapshot commits excluded; 23 of them are the team's own fixes, taken ahead of a
 > sync, and keep their authors. The sections below are the line items.</sub>
 
 ## Every change, area by area
@@ -324,7 +324,7 @@ first.)
   on screen; and still runs a waiting `SET_CREATURE_PROPERTY` on its creature (original level 20 makes its
   second Avatar capturable that way). A replay from before the change reads its four players instead of
   stopping at its first turn. The other direction can't be fixed in builds already released: a game saved
-  by this version doesn't open in 1.4.0.6199 or earlier.
+  by this version doesn't open in 1.4.0.6199 or earlier, nor in stable 1.4.0.6109.
 - **Files that came along for the ride are no longer treated as content.** Archives built on macOS or
   Windows carry a small hidden companion file beside every real one, and campaigns, mods and map packs
   reach a Linux install as archives. This fork's own directory scanner handed those companions to the game
@@ -343,6 +343,14 @@ first.)
   aborted the game at a level transition. Rooms now sever their workers on deletion, the list head is
   only rewritten when the room agrees, and orphaned creatures detach themselves. The ~18 guarded list
   walks stay as the last line of defence, and the fault exists in upstream KeeperFX to this day.
+- **No crash at a level change, and no freed memory for map scripts.** Taking LuaJIT's `ffi` module away
+  from map scripts (see *Map scripts stay inside the game* below) let two of LuaJIT's internal tables be freed
+  while its C code still used them. With the AppImage's LuaJIT, every level change then read and wrote memory
+  that was no longer the game's, and finishing a level could close the game
+  ([#91](https://github.com/ForkedInTime/keeperfx-tux-edition/issues/91)); on every LuaJIT, a script line as
+  short as `local x = 1LL; x.foo` read freed memory. Both tables are now kept alive, out of scripts' reach. A
+  test closes the game's Lua state after that step with memory checking that crashes on any use of freed
+  memory, against both LuaJIT versions. Fixed in stable 1.4.0.6109.
 - **Lua errors no longer close the game.** A failed Lua command — from the console, a map script or a
   mod's hook — left Lua's stack a slot lower each time, and on the sixth LuaJIT exited: the game closed
   with nothing in the log and nothing saved. A mod's hook that fails runs every turn, so a broken mod
