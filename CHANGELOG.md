@@ -4,6 +4,29 @@ This tracks the changes in *this* fork on top of the KeeperFX team's `master`.
 Version numbers follow the engine build (`<major>.<minor>.<release>.<build>`), with
 `alpha` appended on the alpha channel and nothing appended on the stable one.
 
+## 1.4.0.6109 — 2026-11-19 — stable
+
+**Replaces 1.4.0.6103.** One fix, for a crash at a level change and a hole in the protection of map scripts.
+
+- **The game no longer crashes when it goes from one level to the next** ([#91](https://github.com/ForkedInTime/keeperfx-tux-edition/issues/91)).
+  Since 1.4.0.6072, finishing a level and starting the next could close the game: a crash in Lua's shutdown
+  (`lua_close`) while the game cleared the finished level's scripts. It happened with the AppImage, whose
+  LuaJIT (version 2.1, December 2023) keeps one of its internal tables alive only through the
+  `ffi` module, the one this edition takes away from map scripts. Taking it away let that table be freed, and
+  every level change then read and wrote memory that was no longer the game's. Reproduced with the AppImage's
+  own LuaJIT at the exact place of the report's crash; with this release it no longer happens.
+- **A map script can't reach freed memory through a 64-bit number.** The same step freed a second table, on
+  every LuaJIT, the Arch package's included: any script line such as `local x = 1LL; x.foo` read memory that
+  had been freed, which a hostile map could have turned into an attack. Both tables are now kept alive, out of
+  scripts' reach; scripts still can't use the `ffi` module. Found while reviewing the first fix.
+
+Saves are unchanged: same format as 1.4.0.6103, so games load both ways between the two. Replays and
+multiplayer are unchanged too. Checked on this code, on hidden displays with no sound: the unit tests (14,571
+and 36 checks), a new test that closes the game's Lua state after the protection step with memory checking
+that crashes on any use of freed memory (it crashed before the fix with the AppImage's LuaJIT and, for the
+second table, with Arch's; it passes with both now), the OpenGL, menu and map checks with both LuaJIT versions
+(12/12 each), and a two-player game by direct connection (19/19, no resync).
+
 ## 1.4.0.6103 — 2026-11-06 — stable
 
 **Replaces 1.4.0.6098.** Three of the KeeperFX team's fixes, taken early, with their authors.
