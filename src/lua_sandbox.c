@@ -302,52 +302,46 @@ static void sb_set_global(lua_State *L, const char *name, lua_CFunction fn)
     lua_setglobal(L, name);
 }
 
-/** The registry key the FFI's finalizer table is kept under: this variable's address. */
-static const char sb_ffi_finalizers_key = 0;
+/** The registry key the FFI's own tables are kept under: this variable's address. */
+static const char sb_ffi_tables_key = 0;
 
-/** Whether the value at idx is the FFI's table of cdata finalizers: LuaJIT makes it its own
- *  metatable, with __mode "k". */
-static int sb_is_ffi_finalizer_table(lua_State *L, int idx)
+/** Keeps the FFI's own tables alive once the ffi module (at loaded_idx, package.loaded) is gone.
+ *  LuaJIT holds two tables only through the module's functions, as their environments, while
+ *  C code that outlives the module keeps raw pointers to them:
+ *  - the metamethod table (CTState miscmap, ffi.metatype's environment, every LuaJIT version), read
+ *    by every cdata metamethod a script triggers -- `local x = 1LL; x.foo`, `x + {}`, `x()`...;
+ *  - before LuaJIT's f5affaa6c4 (2024-04-18), the cdata finalizer table (ffi.gc's environment),
+ *    walked by every lua_close(), one per level change.
+ *  Dropped with the module, the collector freed both, and the game read and wrote freed memory: the
+ *  crash in lua_close() going to the next level (issue #91, the AppImage's LuaJIT of 2023-12-23), and
+ *  a use-after-free any map script could reach on every LuaJIT. Both environments are kept in a
+ *  registry table under a private key. They hold no functions of the module (the metamethod table
+ *  holds metatables, the finalizer table finalizers the game's own code set), and scripts don't get
+ *  debug.getregistry. */
+static void sb_keep_ffi_tables(lua_State *L, int loaded_idx)
 {
-    idx = (idx < 0) ? lua_gettop(L) + idx + 1 : idx;
-    if (!lua_istable(L, idx) || !lua_getmetatable(L, idx))
-        return 0;
-    int is_self = lua_rawequal(L, -1, idx);
-    lua_pushliteral(L, "__mode");
-    lua_rawget(L, -2);
-    int weak_keys = (lua_type(L, -1) == LUA_TSTRING) && (strcmp(lua_tostring(L, -1), "k") == 0);
-    lua_pop(L, 2);
-    return is_self && weak_keys;
-}
-
-/** Keeps the FFI's finalizer table alive once the ffi module (at loaded_idx, package.loaded) is gone.
- *  LuaJIT before 2024-04-18 (its f5affaa6c4) holds that table only through the module -- it is
- *  ffi.gc's environment -- yet lua_close() walks it. Dropped with the module, the collector freed it,
- *  and every lua_close(), one per level change, read and wrote freed memory: a crash whenever that
- *  memory had been reused or returned to the system (issue #91, the AppImage's LuaJIT of
- *  2023-12-23). Newer LuaJIT keeps the table as a GC root itself, and ffi.gc's environment is then
- *  another table, left alone here. Kept in the registry under a private key: the table holds no
- *  functions of the module, and scripts don't get debug.getregistry. */
-static void sb_keep_ffi_finalizers(lua_State *L, int loaded_idx)
-{
+    static const char *const functions[] = {"metatype", "gc"};
     loaded_idx = (loaded_idx < 0) ? lua_gettop(L) + loaded_idx + 1 : loaded_idx;
     lua_getfield(L, loaded_idx, "ffi");
-    if (lua_istable(L, -1))
+    if (!lua_istable(L, -1))
     {
-        lua_getfield(L, -1, "gc");
-        if (lua_isfunction(L, -1))
+        lua_pop(L, 1);
+        return;
+    }
+    lua_newtable(L);
+    for (size_t i = 0; i < sizeof(functions) / sizeof(functions[0]); i++)
+    {
+        lua_getfield(L, -2, functions[i]);
+        if (lua_iscfunction(L, -1))
         {
             lua_getfenv(L, -1);
-            if (sb_is_ffi_finalizer_table(L, -1))
-            {
-                lua_pushlightuserdata(L, (void *)&sb_ffi_finalizers_key);
-                lua_pushvalue(L, -2);
-                lua_rawset(L, LUA_REGISTRYINDEX);
-            }
-            lua_pop(L, 1);
+            lua_rawseti(L, -3, (int)i + 1);
         }
         lua_pop(L, 1);
     }
+    lua_pushlightuserdata(L, (void *)&sb_ffi_tables_key);
+    lua_insert(L, -2);
+    lua_rawset(L, LUA_REGISTRYINDEX);
     lua_pop(L, 1);
 }
 
@@ -366,7 +360,7 @@ static void sb_drop_ffi(lua_State *L)
     lua_getfield(L, LUA_REGISTRYINDEX, "_LOADED");
     if (lua_istable(L, -1))
     {
-        sb_keep_ffi_finalizers(L, -1);
+        sb_keep_ffi_tables(L, -1);
         lua_pushnil(L);
         lua_setfield(L, -2, "ffi");
     }
